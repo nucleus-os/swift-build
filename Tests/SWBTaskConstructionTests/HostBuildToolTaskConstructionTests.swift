@@ -690,7 +690,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
         try await withTemporaryDirectory { tmpDir in
             let swiftCompilerPath = try await self.swiftCompilerPath
             let swiftVersion = try await self.swiftVersion
-            let testProject = TestProject(
+            let testProject = TestPackageProject(
                 "aProject",
                 groupTree: TestGroup("Foo", children: [
                     TestFile("shared.swift"),
