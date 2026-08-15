@@ -481,9 +481,9 @@ extension SpecializationParameters {
             let destinationSDK = configuredTarget.parameters.activeRunDestination.flatMap { destination in
                 try? workspaceContext.sdkRegistry.lookup(nameOrPath: destination.sdk, basePath: Path.root, activeRunDestination: destination)
             }
-            let sdkRoot = configuredTargetSettings.sdk === destinationSDK
-                ? nil
-                : scope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
+            let evaluatedSDKRoot = scope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
+            let sdkRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
+                ?? (configuredTarget.target.isHostBuildTool || configuredTargetSettings.sdk !== destinationSDK ? evaluatedSDKRoot : nil)
 
             self.init(source: .target(name: configuredTarget.target.name), platform: configuredTargetSettings.platform, sdkRoot: sdkRoot, sdkVariant: configuredTargetSettings.sdkVariant, supportedPlatforms: SpecializationParameters.supportedPlatforms(for: configuredTargetSettings.platform, registry: workspaceContext.core.platformRegistry), toolchain: toolchain?.map { $0.identifier }, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: superimposedProperties, diagnostics: [])
         }
