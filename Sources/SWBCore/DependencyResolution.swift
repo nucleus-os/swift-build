@@ -482,8 +482,17 @@ extension SpecializationParameters {
                 try? workspaceContext.sdkRegistry.lookup(nameOrPath: destination.sdk, basePath: Path.root, activeRunDestination: destination)
             }
             let evaluatedSDKRoot = scope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
-            let sdkRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
-                ?? (configuredTarget.target.isHostBuildTool || configuredTargetSettings.sdk !== destinationSDK ? evaluatedSDKRoot : nil)
+            let sdkRoot: String?
+            if configuredTarget.target.isHostBuildTool {
+                // A workspace specialization may leave the destination SDK in the
+                // configured target's parameters even though the host-build-tool
+                // product type has overridden the effective SDKROOT. Propagate the
+                // effective host selection to the tool's dependencies.
+                sdkRoot = evaluatedSDKRoot
+            } else {
+                sdkRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
+                    ?? (configuredTargetSettings.sdk !== destinationSDK ? evaluatedSDKRoot : nil)
+            }
 
             self.init(source: .target(name: configuredTarget.target.name), platform: configuredTargetSettings.platform, sdkRoot: sdkRoot, sdkVariant: configuredTargetSettings.sdkVariant, supportedPlatforms: SpecializationParameters.supportedPlatforms(for: configuredTargetSettings.platform, registry: workspaceContext.core.platformRegistry), toolchain: toolchain?.map { $0.identifier }, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: superimposedProperties, diagnostics: [])
         }
