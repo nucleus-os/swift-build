@@ -485,6 +485,17 @@ extension SpecializationParameters {
             let sdkRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
                 ?? (configuredTarget.target.isHostBuildTool || configuredTargetSettings.sdk !== destinationSDK ? evaluatedSDKRoot : nil)
 
+            if getEnvironmentVariable("NUCLEUS_SWIFTBUILD_DIAGNOSTICS") == "1" {
+                print(
+                    "NUCLEUS_SWIFTBUILD_DIAGNOSTICS target=\(configuredTarget.target.name) "
+                        + "hostTool=\(configuredTarget.target.isHostBuildTool) "
+                        + "parameterSDKROOT=\(configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name] ?? "nil") "
+                        + "evaluatedSDKROOT=\(evaluatedSDKRoot ?? "nil") "
+                        + "settingsSDK=\(configuredTargetSettings.sdk?.canonicalName ?? "nil") "
+                        + "destinationSDK=\(destinationSDK?.canonicalName ?? "nil") "
+                        + "specializationSDKROOT=\(sdkRoot ?? "nil")")
+            }
+
             self.init(source: .target(name: configuredTarget.target.name), platform: configuredTargetSettings.platform, sdkRoot: sdkRoot, sdkVariant: configuredTargetSettings.sdkVariant, supportedPlatforms: SpecializationParameters.supportedPlatforms(for: configuredTargetSettings.platform, registry: workspaceContext.core.platformRegistry), toolchain: toolchain?.map { $0.identifier }, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: superimposedProperties, diagnostics: [])
         }
     }
