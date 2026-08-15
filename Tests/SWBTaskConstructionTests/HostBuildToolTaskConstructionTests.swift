@@ -781,8 +781,8 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["library.swift"])
                     ], dependencies: [
-                        "HostTool",
-                        "SharedDependencyProduct"
+                        "SharedDependencyProduct",
+                        "HostTool"
                     ]),
                 ])
             let testWorkspace = TestWorkspace("aWorkspace", projects: [testProject])
