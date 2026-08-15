@@ -717,6 +717,22 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["shared.swift"])
                     ]),
+                    TestPackageProductTarget(
+                        "SharedDependencyProduct",
+                        frameworksBuildPhase: TestFrameworksBuildPhase([
+                            TestBuildFile(.target("SharedDependency"))
+                        ]),
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto",
+                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
+                                ])
+                        ],
+                        dependencies: [
+                            "SharedDependency"
+                        ]),
                     TestStandardTarget("HostToolDependency", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
                             "Debug",
@@ -727,8 +743,24 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["dep.swift"])
                     ], dependencies: [
-                        "SharedDependency"
+                        "SharedDependencyProduct"
                     ]),
+                    TestPackageProductTarget(
+                        "HostToolDependencyProduct",
+                        frameworksBuildPhase: TestFrameworksBuildPhase([
+                            TestBuildFile(.target("HostToolDependency"))
+                        ]),
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto",
+                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
+                                ])
+                        ],
+                        dependencies: [
+                            "HostToolDependency"
+                        ]),
                     TestStandardTarget("HostTool", type: .hostBuildTool, buildConfigurations: [
                         TestBuildConfiguration(
                             "Debug",
@@ -737,7 +769,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             ])], buildPhases: [
                                 TestSourcesBuildPhase(["tool.swift"])
                             ], dependencies: [
-                                "HostToolDependency"
+                                "HostToolDependencyProduct"
                             ]),
                     TestStandardTarget("Library", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
@@ -750,7 +782,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         TestSourcesBuildPhase(["library.swift"])
                     ], dependencies: [
                         "HostTool",
-                        "SharedDependency"
+                        "SharedDependencyProduct"
                     ]),
                 ])
             let testWorkspace = TestWorkspace("aWorkspace", projects: [testProject])
