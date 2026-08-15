@@ -791,10 +791,10 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                 results.checkTarget("Library") { libraryTarget in
                     results.checkTask(.matchTarget(libraryTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
                         compileTask.checkCommandLineContains([
-                            "-target", destinationTriple,
                             "-resource-dir", destinationSwiftResources.str,
                             "-sdk", destinationSDKRoot.str,
                             "-sysroot", destinationSDKRoot.str,
+                            "-target", destinationTriple,
                         ])
                     }
                 }
