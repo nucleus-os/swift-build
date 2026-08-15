@@ -493,6 +493,9 @@ extension SpecializationParameters {
                 sdkRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
                     ?? (configuredTargetSettings.sdk !== destinationSDK ? evaluatedSDKRoot : nil)
             }
+            if configuredTarget.target.name == "HostTool" || configuredTarget.target.name == "HostToolDependency" {
+                print("NUCLEUS_HOST_SDK source=\(configuredTarget.target.name) host=\(configuredTarget.target.isHostBuildTool) parameter=\(configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name] ?? "nil") evaluated=\(evaluatedSDKRoot ?? "nil") settings=\(configuredTargetSettings.sdk?.canonicalName ?? "nil") destination=\(destinationSDK?.canonicalName ?? "nil") propagated=\(sdkRoot ?? "nil")")
+            }
 
             self.init(source: .target(name: configuredTarget.target.name), platform: configuredTargetSettings.platform, sdkRoot: sdkRoot, sdkVariant: configuredTargetSettings.sdkVariant, supportedPlatforms: SpecializationParameters.supportedPlatforms(for: configuredTargetSettings.platform, registry: workspaceContext.core.platformRegistry), toolchain: toolchain?.map { $0.identifier }, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: superimposedProperties, diagnostics: [])
         }
@@ -1022,6 +1025,9 @@ extension SpecializationParameters {
         }
 
         let filteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkRoot: specialization.sdkRoot, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: imposedToolchain, canonicalNameSuffix: imposedCanonicalNameSuffix, swiftCompileCache: imposedSwiftCompileCache, superimposedProperties: specialization.superimposedProperties)
+        if forTarget.name == "HostTool" || forTarget.name == "HostToolDependency" {
+            print("NUCLEUS_HOST_SDK dependency=\(forTarget.name) incoming=\(specialization) filtered=\(filteredSpecialization) parameters=\(parameters.overrides[BuiltinMacros.SDKROOT.name] ?? "nil")")
+        }
 
         // Otherwise, we need to create a new specialization; do so by imposing the specialization on the build parameters.
         // NOTE: If the target doesn't support specialization, then unless the target comes from a package, then it's important to **not** impart those settings unless they are coming from overrides. Doing so has the side-effect of causing dependencies of downstream targets to be specialized incorrectly (e.g. a specialized target shouldn't cause its own dependencies to be specialized).
