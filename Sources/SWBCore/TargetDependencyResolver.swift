@@ -720,6 +720,13 @@ fileprivate extension TargetDependencyResolver {
     ///   - dependencyPath: The ordered list of dependencies added along the path to this target, for detecting recursion.
     ///   - imposedParameters: Additional build parameter overrides which should be imposed upon all targets along this path (for specialization purposes).
     private func addDependencies(forConfiguredTarget configuredTarget: ConfiguredTarget, toDependencyClosure dependencyClosure: inout OrderedSet<ConfiguredTarget>, dependencyPath: inout OrderedSet<ConfiguredTarget>, imposedParameters: SpecializationParameters? = nil) async {
+        let nucleusDiagnosedTargets = ["JExtractSwiftPlugin", "swift-java-product", "SwiftJavaToolLib", "Subprocess", "Subprocess-product", "SystemPackage", "SystemPackage-product"]
+        let nucleusShouldDiagnose = getEnvironmentVariable("NUCLEUS_SWIFTBUILD_DIAGNOSTICS") == "1"
+            && nucleusDiagnosedTargets.contains(configuredTarget.target.name)
+        if nucleusShouldDiagnose {
+            let settings = buildRequestContext.getCachedSettings(configuredTarget.parameters, target: configuredTarget.target)
+            print("NUCLEUS_SWIFTBUILD add target=\(configuredTarget.target.name) type=\(configuredTarget.target.type) guid=\(configuredTarget.guid) configuredSDKROOT=\(settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str) parameterSDKROOT=\(configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name] ?? "nil") imposedSDKROOT=\(imposedParameters?.sdkRoot ?? "nil")")
+        }
         let statusMessage = workspaceContext.userPreferences.activityTextShorteningLevel >= .allDynamicText
             ? "Computing dependencies"
             : "Computing dependencies for '\(configuredTarget.target.name)'"
@@ -780,6 +787,11 @@ fileprivate extension TargetDependencyResolver {
                 dependencyImposedParameters = imposedParameters
             } else {
                 dependencyImposedParameters = resolver.specializationParameters(dependency.target, workspaceContext: workspaceContext, buildRequest: buildRequest, buildRequestContext: buildRequestContext)
+            }
+            if getEnvironmentVariable("NUCLEUS_SWIFTBUILD_DIAGNOSTICS") == "1"
+                && (nucleusShouldDiagnose || nucleusDiagnosedTargets.contains(dependency.target.target.name)) {
+                let settings = buildRequestContext.getCachedSettings(dependency.target.parameters, target: dependency.target.target)
+                print("NUCLEUS_SWIFTBUILD edge parent=\(configuredTarget.target.name) dependency=\(dependency.target.target.name) type=\(dependency.target.target.type) guid=\(dependency.target.guid) configuredSDKROOT=\(settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str) parameterSDKROOT=\(dependency.target.parameters.overrides[BuiltinMacros.SDKROOT.name] ?? "nil") passedSDKROOT=\(imposedParameters?.sdkRoot ?? "nil") recursiveSDKROOT=\(dependencyImposedParameters?.sdkRoot ?? "nil")")
             }
             await addDependencies(forConfiguredTarget: dependency.target, toDependencyClosure: &dependencyClosure, dependencyPath: &dependencyPath, imposedParameters: dependencyImposedParameters)
         }

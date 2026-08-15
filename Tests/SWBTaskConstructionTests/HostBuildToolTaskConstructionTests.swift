@@ -744,7 +744,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["destination.swift"])
                     ], dependencies: [
-                        "SharedDependencyProduct"
+                        "HostToolDependency"
                     ]),
                     TestStandardTarget("HostToolDependency", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
@@ -772,7 +772,8 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                                 ])
                         ],
                         dependencies: [
-                            "HostToolDependency"
+                            "HostToolDependency",
+                            "SharedDependencyProduct"
                         ]),
                     TestStandardTarget("HostTool", type: .hostBuildTool, buildConfigurations: [
                         TestBuildConfiguration(
@@ -782,6 +783,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             ])], buildPhases: [
                                 TestSourcesBuildPhase(["tool.swift"])
                             ], dependencies: [
+                                "HostToolDependency",
                                 "HostToolDependencyProduct"
                             ]),
                     TestStandardTarget("Library", type: .staticLibrary, buildConfigurations: [
@@ -884,7 +886,27 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     #expect(hostCompileCount == 1)
                 }
 
-                for targetName in ["HostTool", "HostToolDependency"] {
+                results.checkTasks(.matchTargetName("HostToolDependency"), .matchRuleType("SwiftDriver Compilation")) { compileTasks in
+                    #expect(compileTasks.count == 2)
+
+                    var destinationCompileCount = 0
+                    var hostCompileCount = 0
+                    for compileTask in compileTasks {
+                        if compileTask.commandLineAsStrings.contains(destinationTriple) {
+                            destinationCompileCount += 1
+                        } else {
+                            hostCompileCount += 1
+                            compileTask.checkCommandLineMatches(["-target", .contains("linux-gnu")])
+                            compileTask.checkCommandLineDoesNotContain("-sdk")
+                            compileTask.checkCommandLineDoesNotContain("-sysroot")
+                            compileTask.checkCommandLineNoMatch(["-resource-dir", .equal(destinationSwiftResources.str)])
+                        }
+                    }
+                    #expect(destinationCompileCount == 1)
+                    #expect(hostCompileCount == 1)
+                }
+
+                for targetName in ["HostTool"] {
                     results.checkTarget(targetName) { hostTarget in
                         results.checkTask(.matchTarget(hostTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
                             compileTask.checkCommandLineMatches(["-target", .contains("linux-gnu")])
