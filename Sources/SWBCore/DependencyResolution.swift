@@ -736,6 +736,7 @@ extension SpecializationParameters {
         let platform = Ref(settings.platform)
         let sdkVariant = settings.sdkVariant?.name
         let sdk = settings.sdk
+        let sdkRoot = settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str
         let unimposedSettingsOfDependency = buildRequestContext.getCachedSettings(parameters.withoutOverrides, target: dependency)
         let dependencyHasAutoSDKRoot = unimposedSettingsOfDependency.enableTargetPlatformSpecialization
 
@@ -749,9 +750,20 @@ extension SpecializationParameters {
             let dependencyToolchains = dependencySettings.toolchains
             guard Ref(dependencyPlatform) == platform && dependencySdkVariant == sdkVariant else { return false }
             // For dependencies with 'auto' SDKROOT, they get their SDK 'imposed', including if it is internal vs public SDK, not just what platform it is.
-            // For such dependencies also confirm that the existing configured dependency matches 'internal vs public' for the SDK.
-            if dependencyHasAutoSDKRoot, let dependencySDK = dependencySettings.sdk, let dependentSDK = sdk, dependencySDK !== dependentSDK || settings.toolchains != dependencyToolchains {
-                return false
+            // For such dependencies also confirm that the existing configured dependency matches 'internal vs public' for the SDK. An exact
+            // SDKROOT must be compared when either side is not registered, as happens when a Linux host tool and a cross-compilation destination
+            // use different SDK roots for the same platform.
+            if dependencyHasAutoSDKRoot {
+                let dependencySDK = dependencySettings.sdk
+                let sdksMatch: Bool
+                if let dependencySDK, let sdk {
+                    sdksMatch = dependencySDK === sdk
+                } else {
+                    sdksMatch = dependencySettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str == sdkRoot
+                }
+                if !sdksMatch || settings.toolchains != dependencyToolchains {
+                    return false
+                }
             }
             return true
         }
@@ -779,6 +791,7 @@ extension SpecializationParameters {
             // Check whether the new configured target uses the same platform as a previous one, because that's a bug.
             if let previousConfiguredTargets = configuredTargetsByTarget[target] {
                 let currentSettings = buildRequestContext.getCachedSettings(parameters, target: target)
+                let targetHasAutoSDKRoot = buildRequestContext.getCachedSettings(parameters.withoutOverrides, target: target).enableTargetPlatformSpecialization
 
                 var hasMultipleTargets = false
                 for previousConfiguredTarget in previousConfiguredTargets {
@@ -792,6 +805,11 @@ extension SpecializationParameters {
                         // We allow multiple configured targets with different SDK suffixes, this gets sorted out at the very
                         // end of computing the dependency graph.
                         if currentSettings.sdk?.canonicalNameSuffix != previousSettings.sdk?.canonicalNameSuffix {
+                            continue
+                        }
+                        // A target with SDKROOT=auto can be required by both a host-tool graph and a destination graph on the same platform.
+                        // Different exact SDK roots make those configurations meaningfully distinct even when neither root is a registered SDK.
+                        if targetHasAutoSDKRoot && currentSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str != previousSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str {
                             continue
                         }
 

@@ -693,6 +693,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
             let testProject = TestProject(
                 "aProject",
                 groupTree: TestGroup("Foo", children: [
+                    TestFile("shared.swift"),
                     TestFile("dep.swift"),
                     TestFile("tool.swift"),
                     TestFile("library.swift"),
@@ -706,6 +707,16 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         ]),
                 ],
                 targets: [
+                    TestStandardTarget("SharedDependency", type: .staticLibrary, buildConfigurations: [
+                        TestBuildConfiguration(
+                            "Debug",
+                            buildSettings: [
+                                "SDKROOT": "auto",
+                                "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
+                            ]),
+                    ], buildPhases: [
+                        TestSourcesBuildPhase(["shared.swift"])
+                    ]),
                     TestStandardTarget("HostToolDependency", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
                             "Debug",
@@ -715,6 +726,8 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             ]),
                     ], buildPhases: [
                         TestSourcesBuildPhase(["dep.swift"])
+                    ], dependencies: [
+                        "SharedDependency"
                     ]),
                     TestStandardTarget("HostTool", type: .hostBuildTool, buildConfigurations: [
                         TestBuildConfiguration(
@@ -736,7 +749,8 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["library.swift"])
                     ], dependencies: [
-                        "HostTool"
+                        "HostTool",
+                        "SharedDependency"
                     ]),
                 ])
             let testWorkspace = TestWorkspace("aWorkspace", projects: [testProject])
@@ -796,6 +810,26 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             "-sysroot", destinationSDKRoot.str,
                             "-target", destinationTriple,
                         ])
+                    }
+                }
+
+                results.checkTarget("SharedDependency", sdkroot: destinationSDKRoot.str) { destinationDependencyTarget in
+                    results.checkTask(.matchTarget(destinationDependencyTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
+                        compileTask.checkCommandLineContains([
+                            "-resource-dir", destinationSwiftResources.str,
+                            "-sdk", destinationSDKRoot.str,
+                            "-sysroot", destinationSDKRoot.str,
+                            "-target", destinationTriple,
+                        ])
+                    }
+                }
+
+                results.checkTarget("SharedDependency", sdkroot: "linux") { hostDependencyTarget in
+                    results.checkTask(.matchTarget(hostDependencyTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
+                        compileTask.checkCommandLineMatches(["-target", .contains("linux-gnu")])
+                        compileTask.checkCommandLineDoesNotContain("-sdk")
+                        compileTask.checkCommandLineDoesNotContain("-sysroot")
+                        compileTask.checkCommandLineNoMatch(["-resource-dir", .equal(destinationSwiftResources.str)])
                     }
                 }
 
