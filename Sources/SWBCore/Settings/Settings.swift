@@ -3707,11 +3707,19 @@ private class SettingsBuilder: ProjectMatchLookup {
         // ignore run destination if requested
         guard !UserDefaults.skipRunDestinationOverride else { return }
 
-        // If the target supports specialization and it already has an SDK, then we need to use that instead of attempting to override the SDK with the run destination information. This is very important in scenarios where the destination is Mac Catalyst, but the target is building for iphoneos. The target will be re-configured for macosx/iosmac.
+        // If the target supports specialization and it already has an exact SDKROOT
+        // selection, then we need to use that instead of attempting to override the SDK
+        // with the run destination information. This is very important in scenarios where
+        // the destination is Mac Catalyst, but the target is building for iphoneos. It is
+        // also required when a host tool and destination use the same platform name but
+        // different SDKs, such as a native Linux tool in a Linux cross-compilation.
         do {
             let scope = createScope(sdkToUse: nil)
-            let sdk = try sdkRegistry.lookup(nameOrPath: scope.evaluate(BuiltinMacros.SDKROOT).str, basePath: project?.sourceRoot ?? Path.root, activeRunDestination: nil)
-            if Settings.targetPlatformSpecializationEnabled(scope: scope) && sdk != nil {
+            let sdkRoot = scope.evaluate(BuiltinMacros.SDKROOT).str
+            let sdk = try sdkRegistry.lookup(nameOrPath: sdkRoot, basePath: project?.sourceRoot ?? Path.root, activeRunDestination: nil)
+            if Settings.targetPlatformSpecializationEnabled(scope: scope)
+                && (sdk != nil || (!sdkRoot.isEmpty && sdkRoot != "auto"))
+            {
                 return
             }
         } catch { /* fallthrough */ }
