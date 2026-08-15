@@ -813,24 +813,30 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     }
                 }
 
-                results.checkTarget("SharedDependency", sdkroot: destinationSDKRoot.str) { destinationDependencyTarget in
-                    results.checkTask(.matchTarget(destinationDependencyTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
-                        compileTask.checkCommandLineContains([
-                            "-resource-dir", destinationSwiftResources.str,
-                            "-sdk", destinationSDKRoot.str,
-                            "-sysroot", destinationSDKRoot.str,
-                            "-target", destinationTriple,
-                        ])
-                    }
-                }
+                results.checkTasks(.matchTargetName("SharedDependency"), .matchRuleType("SwiftDriver Compilation")) { compileTasks in
+                    #expect(compileTasks.count == 2)
 
-                results.checkTarget("SharedDependency", sdkroot: "linux") { hostDependencyTarget in
-                    results.checkTask(.matchTarget(hostDependencyTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
-                        compileTask.checkCommandLineMatches(["-target", .contains("linux-gnu")])
-                        compileTask.checkCommandLineDoesNotContain("-sdk")
-                        compileTask.checkCommandLineDoesNotContain("-sysroot")
-                        compileTask.checkCommandLineNoMatch(["-resource-dir", .equal(destinationSwiftResources.str)])
+                    var destinationCompileCount = 0
+                    var hostCompileCount = 0
+                    for compileTask in compileTasks {
+                        if compileTask.commandLineAsStrings.contains(destinationTriple) {
+                            destinationCompileCount += 1
+                            compileTask.checkCommandLineContains([
+                                "-resource-dir", destinationSwiftResources.str,
+                                "-sdk", destinationSDKRoot.str,
+                                "-sysroot", destinationSDKRoot.str,
+                                "-target", destinationTriple,
+                            ])
+                        } else {
+                            hostCompileCount += 1
+                            compileTask.checkCommandLineMatches(["-target", .contains("linux-gnu")])
+                            compileTask.checkCommandLineDoesNotContain("-sdk")
+                            compileTask.checkCommandLineDoesNotContain("-sysroot")
+                            compileTask.checkCommandLineNoMatch(["-resource-dir", .equal(destinationSwiftResources.str)])
+                        }
                     }
+                    #expect(destinationCompileCount == 1)
+                    #expect(hostCompileCount == 1)
                 }
 
                 for targetName in ["HostTool", "HostToolDependency"] {
