@@ -770,7 +770,7 @@ fileprivate extension TargetDependencyResolver {
         var immediateDependencies = OrderedSet<ResolvedTargetDependency>()
 
         /// Nested function to record that `dependency` is an immediate dependency of the target being processed.
-        let recordImmediateDependency: (ResolvedTargetDependency, SpecializationParameters?, inout OrderedSet<ConfiguredTarget>, inout OrderedSet<ConfiguredTarget>) async -> Void = { [self] dependency, imporsedParameters, dependencyClosure, dependencyPath in
+        let recordImmediateDependency: (ResolvedTargetDependency, SpecializationParameters?, inout OrderedSet<ConfiguredTarget>, inout OrderedSet<ConfiguredTarget>) async -> Void = { [self] dependency, imposedParameters, dependencyClosure, dependencyPath in
             immediateDependencies.append(dependency)
             let dependencyImposedParameters: SpecializationParameters?
             if self.resolver.makeAggregateTargetsTransparentForSpecialization && dependency.target.target.type == .aggregate {
