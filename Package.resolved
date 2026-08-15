@@ -1,0 +1,50 @@
+{
+  "pins" : [
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser.git",
+      "state" : {
+        "branch" : "1.6.1",
+        "revision" : "309a47b2b1d9b5e991f36961c983ecec72275be3"
+      }
+    },
+    {
+      "identity" : "swift-driver",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-driver.git",
+      "state" : {
+        "branch" : "release/6.4.x",
+        "revision" : "174567a5681a9a949bcd52f821deb8fa65105434"
+      }
+    },
+    {
+      "identity" : "swift-llbuild",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-llbuild.git",
+      "state" : {
+        "branch" : "release/6.4.x",
+        "revision" : "fd2284d2affcb33ed0ac88c1db861f73bc56a031"
+      }
+    },
+    {
+      "identity" : "swift-system",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-system.git",
+      "state" : {
+        "branch" : "1.5.0",
+        "revision" : "61e4ca4b81b9e09e2ec863b00c340eb13497dac6"
+      }
+    },
+    {
+      "identity" : "swift-tools-protocols",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-tools-protocols.git",
+      "state" : {
+        "branch" : "release/6.4.x",
+        "revision" : "4345e69c5572ec3d1f737fba90bca024b32da5cf"
+      }
+    }
+  ],
+  "version" : 3
+}
