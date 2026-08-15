@@ -3707,6 +3707,19 @@ private class SettingsBuilder: ProjectMatchLookup {
         // ignore run destination if requested
         guard !UserDefaults.skipRunDestinationOverride else { return }
 
+        // A concrete SDKROOT in the build-parameter override tier is
+        // authoritative. Dependency specialization uses this tier to carry an
+        // exact host SDK to a host tool's transitive dependencies, including
+        // targets which do not otherwise opt into platform specialization.
+        let isHostBuildTool = (target as? StandardTarget).map {
+            ProductTypeIdentifier($0.productTypeIdentifier).isHostBuildTool
+        } ?? false
+        if !isHostBuildTool,
+           let sdkRoot = parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty,
+           sdkRoot != "auto" {
+            return
+        }
+
         // If the target supports specialization and it already has an exact SDKROOT
         // selection, then we need to use that instead of attempting to override the SDK
         // with the run destination information. This is very important in scenarios where
