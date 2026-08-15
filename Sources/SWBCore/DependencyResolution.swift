@@ -137,6 +137,8 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
 
     /// The desired platform.
     let platform: Platform?
+    /// The exact SDK to preserve while specializing a target's dependencies.
+    let sdkCanonicalName: String?
     /// The desired SDK variant.
     let sdkVariant: SDKVariant?
     /// The desired supported platforms
@@ -167,14 +169,16 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
             sourceString = "imposed by \(source)"
         }
 
-        return "Specialization parameters \(sourceString): platform '\(platform?.identifier ?? "nil")' sdkVariant '\(sdkVariant?.name ?? "nil")' supportedPlatforms: '\(supportedPlatforms?.joined(separator: " ") ?? "nil")' toolchain: '\(toolchain?.joined(separator: " ") ?? "nil")'" +
+        return "Specialization parameters \(sourceString): platform '\(platform?.identifier ?? "nil")' sdk '\(sdkCanonicalName ?? "nil")' sdkVariant '\(sdkVariant?.name ?? "nil")' supportedPlatforms: '\(supportedPlatforms?.joined(separator: " ") ?? "nil")' toolchain: '\(toolchain?.joined(separator: " ") ?? "nil")'" +
             // Hide the suffix if it is not present.
         (canonicalNameSuffix != nil ? " suffix: \(String(describing: canonicalNameSuffix))" : "")
     }
 
     private func effectiveSDKRootOverride(originalParameters: BuildParameters, workspaceContext: WorkspaceContext) -> String? {
-        if let platform {
-            let sdkNameBase: String?
+        let sdkNameBase: String?
+        if let sdkCanonicalName {
+            sdkNameBase = sdkCanonicalName
+        } else if let platform {
             if let runDestination = originalParameters.activeRunDestination,
                let runDestinationSDK = try? workspaceContext.sdkRegistry.lookup(nameOrPath: runDestination.sdk, basePath: Path.root, activeRunDestination: runDestination),
                Self.platform(forSDK: runDestinationSDK, workspaceContext: workspaceContext) === platform {
@@ -182,13 +186,13 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
             } else {
                 sdkNameBase = platform.sdkCanonicalName
             }
-            if let canonicalNameSuffix, !canonicalNameSuffix.isEmpty, sdkNameBase?.hasSuffix(".\(canonicalNameSuffix)") != true {
-                return sdkNameBase.map { "\($0).\(canonicalNameSuffix)" }
-            } else {
-                return sdkNameBase
-            }
         } else {
-            return nil
+            sdkNameBase = nil
+        }
+        if let canonicalNameSuffix, !canonicalNameSuffix.isEmpty, sdkNameBase?.hasSuffix(".\(canonicalNameSuffix)") != true {
+            return sdkNameBase.map { "\($0).\(canonicalNameSuffix)" }
+        } else {
+            return sdkNameBase
         }
     }
 
@@ -208,6 +212,7 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
     func isCompatible(with configuredTarget: ConfiguredTarget, settings: Settings, workspaceContext: WorkspaceContext) -> Bool {
         let toolchain = effectiveToolchainOverride(originalParameters: configuredTarget.parameters, workspaceContext: workspaceContext)
         return (platform == nil || platform === settings.platform) &&
+        (sdkCanonicalName.map { settings.sdk?.canonicalName == $0 || settings.sdk?.aliases.contains($0) == true } ?? true) &&
         (sdkVariant == nil || sdkVariant?.name == settings.sdkVariant?.name) &&
         (toolchain == nil || toolchain == settings.toolchains.map(\.identifier)) &&
         (canonicalNameSuffix == nil || canonicalNameSuffix?.nilIfEmpty == settings.sdk?.canonicalNameSuffix)
@@ -220,7 +225,7 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
         guard effectiveSuperimposedProperties != superimposedProperties else {
             return self
         }
-        return type(of: self).init(source: source, platform: platform, sdkVariant: sdkVariant, supportedPlatforms: supportedPlatforms, toolchain: toolchain, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: effectiveSuperimposedProperties)
+        return type(of: self).init(source: source, platform: platform, sdkCanonicalName: sdkCanonicalName, sdkVariant: sdkVariant, supportedPlatforms: supportedPlatforms, toolchain: toolchain, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: effectiveSuperimposedProperties)
     }
 
     /// Compute a derived set of build parameters with the specialization imposed on them.
@@ -253,9 +258,10 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
         return parameters.mergingOverrides(overrides)
     }
 
-    init(source: SpecializationSource, platform: Platform?, sdkVariant: SDKVariant?, supportedPlatforms: [String]?, toolchain: [String]?, canonicalNameSuffix: String?, swiftCompileCache: Bool? = nil, superimposedProperties: SuperimposedProperties? = nil, diagnostics: [Diagnostic] = []) {
+    init(source: SpecializationSource, platform: Platform?, sdkCanonicalName: String? = nil, sdkVariant: SDKVariant?, supportedPlatforms: [String]?, toolchain: [String]?, canonicalNameSuffix: String?, swiftCompileCache: Bool? = nil, superimposedProperties: SuperimposedProperties? = nil, diagnostics: [Diagnostic] = []) {
         self.source = source
         self.platform = platform
+        self.sdkCanonicalName = sdkCanonicalName
         self.sdkVariant = sdkVariant
         self.supportedPlatforms = supportedPlatforms
         self.toolchain = toolchain
@@ -360,11 +366,12 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
     }
 
     static func == (lhs: SpecializationParameters, rhs: SpecializationParameters) -> Bool {
-        return lhs.platform?.identifier == rhs.platform?.identifier && lhs.sdkVariant?.name == rhs.sdkVariant?.name && lhs.supportedPlatforms == rhs.supportedPlatforms && lhs.toolchain == rhs.toolchain && lhs.canonicalNameSuffix == rhs.canonicalNameSuffix && lhs.superimposedProperties == rhs.superimposedProperties
+        return lhs.platform?.identifier == rhs.platform?.identifier && lhs.sdkCanonicalName == rhs.sdkCanonicalName && lhs.sdkVariant?.name == rhs.sdkVariant?.name && lhs.supportedPlatforms == rhs.supportedPlatforms && lhs.toolchain == rhs.toolchain && lhs.canonicalNameSuffix == rhs.canonicalNameSuffix && lhs.superimposedProperties == rhs.superimposedProperties
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(platform?.identifier)
+        hasher.combine(sdkCanonicalName)
         hasher.combine(sdkVariant?.name)
         hasher.combine(supportedPlatforms)
         hasher.combine(toolchain)
@@ -470,13 +477,20 @@ extension SpecializationParameters {
                 canonicalNameSuffix = nil
             }
 
-            self.init(source: .target(name: configuredTarget.target.name), platform: configuredTargetSettings.platform, sdkVariant: configuredTargetSettings.sdkVariant, supportedPlatforms: SpecializationParameters.supportedPlatforms(for: configuredTargetSettings.platform, registry: workspaceContext.core.platformRegistry), toolchain: toolchain?.map { $0.identifier }, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: superimposedProperties, diagnostics: [])
+            let destinationSDK = configuredTarget.parameters.activeRunDestination.flatMap { destination in
+                try? workspaceContext.sdkRegistry.lookup(nameOrPath: destination.sdk, basePath: Path.root, activeRunDestination: destination)
+            }
+            let sdkCanonicalName = configuredTargetSettings.sdk.flatMap { sdk in
+                sdk === destinationSDK ? nil : sdk.canonicalName
+            }
+
+            self.init(source: .target(name: configuredTarget.target.name), platform: configuredTargetSettings.platform, sdkCanonicalName: sdkCanonicalName, sdkVariant: configuredTargetSettings.sdkVariant, supportedPlatforms: SpecializationParameters.supportedPlatforms(for: configuredTargetSettings.platform, registry: workspaceContext.core.platformRegistry), toolchain: toolchain?.map { $0.identifier }, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: superimposedProperties, diagnostics: [])
         }
     }
 
     var withoutToolchainImposition: SpecializationParameters {
         // FIXME: Strictly speaking we should remove any diagnostics related to the toolchain here.
-        return SpecializationParameters(source: self.source, platform: self.platform, sdkVariant: self.sdkVariant, supportedPlatforms: self.supportedPlatforms, toolchain: nil, canonicalNameSuffix: self.canonicalNameSuffix, superimposedProperties: self.superimposedProperties, diagnostics: self.diagnostics)
+        return SpecializationParameters(source: self.source, platform: self.platform, sdkCanonicalName: self.sdkCanonicalName, sdkVariant: self.sdkVariant, supportedPlatforms: self.supportedPlatforms, toolchain: nil, canonicalNameSuffix: self.canonicalNameSuffix, superimposedProperties: self.superimposedProperties, diagnostics: self.diagnostics)
     }
 }
 
@@ -914,7 +928,7 @@ extension SpecializationParameters {
         // Compute whether the target has expressed an opinion about requiring a suffixed sdk.
         let imposedCanonicalNameSuffix: String?
         if shouldImposePlatform {
-            let initialFilteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: nil, canonicalNameSuffix: nil)
+            let initialFilteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkCanonicalName: specialization.sdkCanonicalName, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: nil, canonicalNameSuffix: nil)
             let initialSettings = buildRequestContext.getCachedSettings(initialFilteredSpecialization.imposed(on: parameters, workspaceContext: workspaceContext), target: forTarget)
             let specializationSDKOptions = initialSettings.globalScope.evaluate(BuiltinMacros.SPECIALIZATION_SDK_OPTIONS)
             if specializationIsSupported {
@@ -973,7 +987,7 @@ extension SpecializationParameters {
         // If we are imposing a platform, we also need to impose the toolchain, but skip it if the explicit setting already matches what we would impose.
         let imposedToolchain: [String]?
         if shouldImposePlatform && specializationIsSupported {
-            let specializationWithoutToolchainImposition = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: nil, canonicalNameSuffix: imposedCanonicalNameSuffix)
+            let specializationWithoutToolchainImposition = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkCanonicalName: specialization.sdkCanonicalName, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: nil, canonicalNameSuffix: imposedCanonicalNameSuffix)
             let settingsWithToolchainImposition = buildRequestContext.getCachedSettings(specializationWithoutToolchainImposition.imposed(on: parameters, workspaceContext: workspaceContext), target: forTarget)
             let configuredToolchains = settingsWithToolchainImposition.toolchains.map({ $0.identifier })
             if let specializedToolchains = specialization.toolchain, configuredToolchains == specializedToolchains {
@@ -997,7 +1011,7 @@ extension SpecializationParameters {
             imposedSwiftCompileCache = nil
         }
 
-        let filteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: imposedToolchain, canonicalNameSuffix: imposedCanonicalNameSuffix, swiftCompileCache: imposedSwiftCompileCache, superimposedProperties: specialization.superimposedProperties)
+        let filteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkCanonicalName: specialization.sdkCanonicalName, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: imposedToolchain, canonicalNameSuffix: imposedCanonicalNameSuffix, swiftCompileCache: imposedSwiftCompileCache, superimposedProperties: specialization.superimposedProperties)
 
         // Otherwise, we need to create a new specialization; do so by imposing the specialization on the build parameters.
         // NOTE: If the target doesn't support specialization, then unless the target comes from a package, then it's important to **not** impart those settings unless they are coming from overrides. Doing so has the side-effect of causing dependencies of downstream targets to be specialized incorrectly (e.g. a specialized target shouldn't cause its own dependencies to be specialized).

@@ -61,6 +61,7 @@
             VALID_ARCHS = "$(HOST_ARCH)";
         };
         OverridingBuildSettings = {
+            SDKROOT = "$(HOST_PLATFORM)";
             SUPPORTED_PLATFORMS = "$(HOST_PLATFORM)";
             EAGER_COMPILATION_DISABLE = YES;
         };
