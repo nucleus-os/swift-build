@@ -694,6 +694,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                 "aProject",
                 groupTree: TestGroup("Foo", children: [
                     TestFile("shared.swift"),
+                    TestFile("destination.swift"),
                     TestFile("dep.swift"),
                     TestFile("tool.swift"),
                     TestFile("library.swift"),
@@ -733,6 +734,18 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         dependencies: [
                             "SharedDependency"
                         ]),
+                    TestStandardTarget("DestinationConsumer", type: .staticLibrary, buildConfigurations: [
+                        TestBuildConfiguration(
+                            "Debug",
+                            buildSettings: [
+                                "SDKROOT": "auto",
+                                "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
+                            ]),
+                    ], buildPhases: [
+                        TestSourcesBuildPhase(["destination.swift"])
+                    ], dependencies: [
+                        "SharedDependencyProduct"
+                    ]),
                     TestStandardTarget("HostToolDependency", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
                             "Debug",
@@ -781,7 +794,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["library.swift"])
                     ], dependencies: [
-                        "SharedDependencyProduct",
+                        "DestinationConsumer",
                         "HostTool"
                     ]),
                 ])
