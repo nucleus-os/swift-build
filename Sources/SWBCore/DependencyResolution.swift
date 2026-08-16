@@ -212,8 +212,12 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
     /// Check if a configured target can be used when this specialization is required.
     func isCompatible(with configuredTarget: ConfiguredTarget, settings: Settings, workspaceContext: WorkspaceContext) -> Bool {
         let toolchain = effectiveToolchainOverride(originalParameters: configuredTarget.parameters, workspaceContext: workspaceContext)
+        // Preserve the exact selection that specialization imposed even when
+        // evaluating it resolves to a canonical SDK path.
+        let configuredSDKRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
+            ?? settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
         return (platform == nil || platform === settings.platform) &&
-        (sdkRoot.map { settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str == $0 } ?? true) &&
+        (sdkRoot.map { configuredSDKRoot == $0 } ?? true) &&
         (sdkVariant == nil || sdkVariant?.name == settings.sdkVariant?.name) &&
         (toolchain == nil || toolchain == settings.toolchains.map(\.identifier)) &&
         (canonicalNameSuffix == nil || canonicalNameSuffix?.nilIfEmpty == settings.sdk?.canonicalNameSuffix)
@@ -865,8 +869,13 @@ extension SpecializationParameters {
         if let configuredTargets = configuredTargetsByTarget[forTarget], !isTopLevelLookup {
             for ct in configuredTargets {
                 if ct.specializeGuidForActiveRunDestination && parameters.activeRunDestination != ct.parameters.activeRunDestination { continue }
-                let parametersWithoutRunDestination = ct.parameters.replacing(activeRunDestination: nil, activeArchitecture: nil)
-                let settings = buildRequestContext.getCachedSettings(parametersWithoutRunDestination, target: ct.target)
+                // An exact SDKROOT distinguishes same-platform host and
+                // destination configurations, so retain the run destination
+                // while checking that specialization.
+                let compatibilityParameters = specialization.sdkRoot == nil
+                    ? ct.parameters.replacing(activeRunDestination: nil, activeArchitecture: nil)
+                    : ct.parameters
+                let settings = buildRequestContext.getCachedSettings(compatibilityParameters, target: ct.target)
                 if specialization.isCompatible(with: ct, settings: settings, workspaceContext: workspaceContext) {
                     if imposedParameters?.superimposedProperties != nil {
                         addSuperimposedProperties(for: ct, superimposedProperties: imposedParameters?.superimposedProperties)

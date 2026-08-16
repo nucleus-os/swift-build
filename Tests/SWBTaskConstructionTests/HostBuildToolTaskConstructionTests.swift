@@ -772,8 +772,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                                 ])
                         ],
                         dependencies: [
-                            "HostToolDependency",
-                            "SharedDependencyProduct"
+                            "HostToolDependency"
                         ]),
                     TestStandardTarget("HostTool", type: .hostBuildTool, buildConfigurations: [
                         TestBuildConfiguration(
@@ -783,7 +782,6 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             ])], buildPhases: [
                                 TestSourcesBuildPhase(["tool.swift"])
                             ], dependencies: [
-                                "HostToolDependency",
                                 "HostToolDependencyProduct"
                             ]),
                     TestStandardTarget("Library", type: .staticLibrary, buildConfigurations: [
