@@ -284,7 +284,7 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
             return imposedParameters
         }
         return imposedParameters.replacing(
-            activeRunDestination: imposedParameters.activeRunDestination,
+            activeRunDestination: nil,
             activeArchitecture: architecture)
     }
 
@@ -512,15 +512,15 @@ extension SpecializationParameters {
             let destinationSDK = configuredTarget.parameters.activeRunDestination.flatMap { destination in
                 try? workspaceContext.sdkRegistry.lookup(nameOrPath: destination.sdk, basePath: Path.root, activeRunDestination: destination)
             }
-            let evaluatedSDKRoot = scope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
             let sdkRoot: String?
             if configuredTarget.target.isHostBuildTool {
-                // A workspace specialization may leave the destination SDK in the
-                // configured target's parameters even though the host-build-tool
-                // product type has overridden the effective SDKROOT. Propagate the
-                // effective host selection to the tool's dependencies.
-                sdkRoot = evaluatedSDKRoot
+                // Host dependencies select the host SDK by dropping the active
+                // run destination when their executable architecture is
+                // imposed. Do not turn the canonical SDK name into an explicit
+                // path-like SDKROOT override.
+                sdkRoot = nil
             } else {
+                let evaluatedSDKRoot = scope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
                 sdkRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
                     ?? (configuredTargetSettings.sdk !== destinationSDK ? evaluatedSDKRoot : nil)
             }
@@ -790,6 +790,9 @@ extension SpecializationParameters {
                 ?? ct.parameters.activeRunDestination?.targetArchitecture
                 ?? dependencySettings.globalScope.evaluate(BuiltinMacros.ARCHS).only
             guard Ref(dependencyPlatform) == platform && dependencySdkVariant == sdkVariant else { return false }
+            if parameters.activeArchitecture != nil && requestedArchitecture != configuredArchitecture {
+                return false
+            }
             let canShareCanonicalSDKConfiguration = explicitSDKRoot == settings.platform?.sdkCanonicalName
                 && requestedArchitecture == configuredArchitecture
             // An explicit SDKROOT is an exact specialization request even for
@@ -860,6 +863,9 @@ extension SpecializationParameters {
                         // Allow multiple configured targets with separate run destinations (this is only the case for
                         // the workspace build description today).
                         if previousConfiguredTarget.specializeGuidForActiveRunDestination && parameters.activeRunDestination != previousConfiguredTarget.parameters.activeRunDestination {
+                            continue
+                        }
+                        if parameters.activeArchitecture != nil && requestedArchitecture != previousArchitecture {
                             continue
                         }
                         // We allow multiple configured targets with different SDK suffixes, this gets sorted out at the very
