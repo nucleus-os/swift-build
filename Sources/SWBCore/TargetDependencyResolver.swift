@@ -456,7 +456,7 @@ fileprivate extension TargetDependencyResolver {
                 if let suffixedTarget = targetsUsingSuffixedSDK.first, targetsUsingSuffixedSDK.count == 1 {
                     // Compute specialization parameters without opinion about the suffixed SDK.
                     let fullParameters = resolver.specializationParameters(suffixedTarget, workspaceContext: workspaceContext, buildRequest: buildRequest, buildRequestContext: buildRequestContext)
-                    let parameters = SpecializationParameters(source: .target(name: suffixedTarget.target.name), platform: fullParameters.platform, sdkVariant: fullParameters.sdkVariant, supportedPlatforms: fullParameters.supportedPlatforms, toolchain: nil, canonicalNameSuffix: nil)
+                    let parameters = SpecializationParameters(source: .target(name: suffixedTarget.target.name), platform: fullParameters.platform, architecture: fullParameters.architecture, sdkVariant: fullParameters.sdkVariant, supportedPlatforms: fullParameters.supportedPlatforms, toolchain: nil, canonicalNameSuffix: nil)
 
                     // Check if any of the unsuffixed targets are incompatible with parameters other than whether the suffixed SDK is being used.
                     let incompatibleTargets = configuredTargets.filter {

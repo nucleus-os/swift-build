@@ -800,6 +800,9 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
             let destinationTriple = "\(destinationArchitecture)-swift-linux-musl"
             let destinationSDKRoot = tmpDir.join("musl-1.2.5.sdk").join(destinationArchitecture)
             let destinationSwiftResources = destinationSDKRoot.join("usr/lib/swift_static")
+            let nativeArchitecture = try #require(Architecture.hostStringValue)
+            let nativeTriple = "\(nativeArchitecture)-swift-linux-musl"
+            let nativeSDKRoot = tmpDir.join("musl-1.2.5.sdk").join(nativeArchitecture)
             let sdkManifestPath = tmpDir.join("swift-sdk.json")
             try await localFS.writeFileContents(sdkManifestPath, waitForNewTimestamp: false) { stream in
                 stream.write("""
@@ -813,6 +816,14 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             "sdkRootPath": "musl-1.2.5.sdk/\(destinationArchitecture)",
                             "swiftResourcesPath": "musl-1.2.5.sdk/\(destinationArchitecture)/usr/lib/swift_static",
                             "swiftStaticResourcesPath": "musl-1.2.5.sdk/\(destinationArchitecture)/usr/lib/swift_static"
+                        },
+                        "\(nativeTriple)": {
+                            "toolsetPaths": [
+                                "toolset.json"
+                            ],
+                            "sdkRootPath": "musl-1.2.5.sdk/\(nativeArchitecture)",
+                            "swiftResourcesPath": "musl-1.2.5.sdk/\(nativeArchitecture)/usr/lib/swift_static",
+                            "swiftStaticResourcesPath": "musl-1.2.5.sdk/\(nativeArchitecture)/usr/lib/swift_static"
                         }
                     }
                 }
@@ -919,6 +930,22 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             compileTask.checkCommandLineNoMatch(["-resource-dir", .equal(destinationSwiftResources.str)])
                         }
                     }
+                }
+            }
+
+            let nativeDestination = try RunDestinationInfo(
+                sdkManifestPath: sdkManifestPath,
+                triple: nativeTriple,
+                targetArchitecture: nativeArchitecture,
+                supportedArchitectures: [nativeArchitecture],
+                disableOnlyActiveArch: false,
+                core: core)
+            let nativeParameters = BuildParameters(configuration: "Debug", activeRunDestination: nativeDestination)
+
+            await tester.checkBuild(nativeParameters, runDestination: nil, targetName: "Library", fs: localFS) { results in
+                results.checkNoDiagnostics()
+                results.checkTasks(.matchTargetName("SharedDependency"), .matchRuleType("SwiftDriver Compilation")) { compileTasks in
+                    #expect(compileTasks.count == 1)
                 }
             }
         }

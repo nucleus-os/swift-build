@@ -137,6 +137,8 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
 
     /// The desired platform.
     let platform: Platform?
+    /// The architecture on which a specialized host tool and its dependencies execute.
+    let architecture: String?
     /// The exact SDKROOT selection to preserve while specializing a target's dependencies.
     let sdkRoot: String?
     /// The desired SDK variant.
@@ -169,7 +171,7 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
             sourceString = "imposed by \(source)"
         }
 
-        return "Specialization parameters \(sourceString): platform '\(platform?.identifier ?? "nil")' sdkRoot '\(sdkRoot ?? "nil")' sdkVariant '\(sdkVariant?.name ?? "nil")' supportedPlatforms: '\(supportedPlatforms?.joined(separator: " ") ?? "nil")' toolchain: '\(toolchain?.joined(separator: " ") ?? "nil")'" +
+        return "Specialization parameters \(sourceString): platform '\(platform?.identifier ?? "nil")' architecture '\(architecture ?? "nil")' sdkRoot '\(sdkRoot ?? "nil")' sdkVariant '\(sdkVariant?.name ?? "nil")' supportedPlatforms: '\(supportedPlatforms?.joined(separator: " ") ?? "nil")' toolchain: '\(toolchain?.joined(separator: " ") ?? "nil")'" +
             // Hide the suffix if it is not present.
         (canonicalNameSuffix != nil ? " suffix: \(String(describing: canonicalNameSuffix))" : "")
     }
@@ -212,12 +214,29 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
     /// Check if a configured target can be used when this specialization is required.
     func isCompatible(with configuredTarget: ConfiguredTarget, settings: Settings, workspaceContext: WorkspaceContext) -> Bool {
         let toolchain = effectiveToolchainOverride(originalParameters: configuredTarget.parameters, workspaceContext: workspaceContext)
+        let configuredArchitecture = configuredTarget.parameters.activeArchitecture
+            ?? configuredTarget.parameters.activeRunDestination?.targetArchitecture
+            ?? settings.globalScope.evaluate(BuiltinMacros.ARCHS).only
         // Preserve the exact selection that specialization imposed even when
         // evaluating it resolves to a canonical SDK path.
         let configuredSDKRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
             ?? settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
+        let sdkRootsAreCompatible: Bool
+        if let sdkRoot, configuredSDKRoot != sdkRoot {
+            // A canonical host SDK and a destination SDK can share one
+            // configuration when they produce the same architecture. This is
+            // the native-build case; creating both configurations would give
+            // them identical output paths. Cross builds still require a
+            // distinct host dependency graph.
+            sdkRootsAreCompatible = sdkRoot == settings.platform?.sdkCanonicalName
+                && architecture != nil
+                && architecture == configuredArchitecture
+        } else {
+            sdkRootsAreCompatible = true
+        }
         return (platform == nil || platform === settings.platform) &&
-        (sdkRoot.map { configuredSDKRoot == $0 } ?? true) &&
+        (architecture == nil || architecture == configuredArchitecture) &&
+        sdkRootsAreCompatible &&
         (sdkVariant == nil || sdkVariant?.name == settings.sdkVariant?.name) &&
         (toolchain == nil || toolchain == settings.toolchains.map(\.identifier)) &&
         (canonicalNameSuffix == nil || canonicalNameSuffix?.nilIfEmpty == settings.sdk?.canonicalNameSuffix)
@@ -230,7 +249,7 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
         guard effectiveSuperimposedProperties != superimposedProperties else {
             return self
         }
-        return type(of: self).init(source: source, platform: platform, sdkRoot: sdkRoot, sdkVariant: sdkVariant, supportedPlatforms: supportedPlatforms, toolchain: toolchain, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: effectiveSuperimposedProperties)
+        return type(of: self).init(source: source, platform: platform, architecture: architecture, sdkRoot: sdkRoot, sdkVariant: sdkVariant, supportedPlatforms: supportedPlatforms, toolchain: toolchain, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: effectiveSuperimposedProperties)
     }
 
     /// Compute a derived set of build parameters with the specialization imposed on them.
@@ -260,12 +279,19 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
         if swiftCompileCache == true {
             overrides[BuiltinMacros.SWIFT_ENABLE_COMPILE_CACHE.name] = "YES"
         }
-        return parameters.mergingOverrides(overrides)
+        let imposedParameters = parameters.mergingOverrides(overrides)
+        guard let architecture else {
+            return imposedParameters
+        }
+        return imposedParameters.replacing(
+            activeRunDestination: imposedParameters.activeRunDestination,
+            activeArchitecture: architecture)
     }
 
-    init(source: SpecializationSource, platform: Platform?, sdkRoot: String? = nil, sdkVariant: SDKVariant?, supportedPlatforms: [String]?, toolchain: [String]?, canonicalNameSuffix: String?, swiftCompileCache: Bool? = nil, superimposedProperties: SuperimposedProperties? = nil, diagnostics: [Diagnostic] = []) {
+    init(source: SpecializationSource, platform: Platform?, architecture: String? = nil, sdkRoot: String? = nil, sdkVariant: SDKVariant?, supportedPlatforms: [String]?, toolchain: [String]?, canonicalNameSuffix: String?, swiftCompileCache: Bool? = nil, superimposedProperties: SuperimposedProperties? = nil, diagnostics: [Diagnostic] = []) {
         self.source = source
         self.platform = platform
+        self.architecture = architecture
         self.sdkRoot = sdkRoot
         self.sdkVariant = sdkVariant
         self.supportedPlatforms = supportedPlatforms
@@ -371,11 +397,12 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
     }
 
     static func == (lhs: SpecializationParameters, rhs: SpecializationParameters) -> Bool {
-        return lhs.platform?.identifier == rhs.platform?.identifier && lhs.sdkRoot == rhs.sdkRoot && lhs.sdkVariant?.name == rhs.sdkVariant?.name && lhs.supportedPlatforms == rhs.supportedPlatforms && lhs.toolchain == rhs.toolchain && lhs.canonicalNameSuffix == rhs.canonicalNameSuffix && lhs.superimposedProperties == rhs.superimposedProperties
+        return lhs.platform?.identifier == rhs.platform?.identifier && lhs.architecture == rhs.architecture && lhs.sdkRoot == rhs.sdkRoot && lhs.sdkVariant?.name == rhs.sdkVariant?.name && lhs.supportedPlatforms == rhs.supportedPlatforms && lhs.toolchain == rhs.toolchain && lhs.canonicalNameSuffix == rhs.canonicalNameSuffix && lhs.superimposedProperties == rhs.superimposedProperties
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(platform?.identifier)
+        hasher.combine(architecture)
         hasher.combine(sdkRoot)
         hasher.combine(sdkVariant?.name)
         hasher.combine(supportedPlatforms)
@@ -498,13 +525,16 @@ extension SpecializationParameters {
                     ?? (configuredTargetSettings.sdk !== destinationSDK ? evaluatedSDKRoot : nil)
             }
 
-            self.init(source: .target(name: configuredTarget.target.name), platform: configuredTargetSettings.platform, sdkRoot: sdkRoot, sdkVariant: configuredTargetSettings.sdkVariant, supportedPlatforms: SpecializationParameters.supportedPlatforms(for: configuredTargetSettings.platform, registry: workspaceContext.core.platformRegistry), toolchain: toolchain?.map { $0.identifier }, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: superimposedProperties, diagnostics: [])
+            let architecture = configuredTarget.target.isHostBuildTool
+                ? scope.evaluate(BuiltinMacros.ARCHS).only
+                : nil
+            self.init(source: .target(name: configuredTarget.target.name), platform: configuredTargetSettings.platform, architecture: architecture, sdkRoot: sdkRoot, sdkVariant: configuredTargetSettings.sdkVariant, supportedPlatforms: SpecializationParameters.supportedPlatforms(for: configuredTargetSettings.platform, registry: workspaceContext.core.platformRegistry), toolchain: toolchain?.map { $0.identifier }, canonicalNameSuffix: canonicalNameSuffix, superimposedProperties: superimposedProperties, diagnostics: [])
         }
     }
 
     var withoutToolchainImposition: SpecializationParameters {
         // FIXME: Strictly speaking we should remove any diagnostics related to the toolchain here.
-        return SpecializationParameters(source: self.source, platform: self.platform, sdkRoot: self.sdkRoot, sdkVariant: self.sdkVariant, supportedPlatforms: self.supportedPlatforms, toolchain: nil, canonicalNameSuffix: self.canonicalNameSuffix, superimposedProperties: self.superimposedProperties, diagnostics: self.diagnostics)
+        return SpecializationParameters(source: self.source, platform: self.platform, architecture: self.architecture, sdkRoot: self.sdkRoot, sdkVariant: self.sdkVariant, supportedPlatforms: self.supportedPlatforms, toolchain: nil, canonicalNameSuffix: self.canonicalNameSuffix, superimposedProperties: self.superimposedProperties, diagnostics: self.diagnostics)
     }
 }
 
@@ -742,6 +772,9 @@ extension SpecializationParameters {
         let sdk = settings.sdk
         let sdkRoot = settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str
         let explicitSDKRoot = parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
+        let requestedArchitecture = parameters.activeArchitecture
+            ?? parameters.activeRunDestination?.targetArchitecture
+            ?? settings.globalScope.evaluate(BuiltinMacros.ARCHS).only
         let unimposedSettingsOfDependency = buildRequestContext.getCachedSettings(parameters.withoutOverrides, target: dependency)
         let dependencyHasAutoSDKRoot = unimposedSettingsOfDependency.enableTargetPlatformSpecialization
 
@@ -753,13 +786,18 @@ extension SpecializationParameters {
             let dependencyPlatform = dependencySettings.platform
             let dependencySdkVariant = dependencySettings.sdkVariant?.name
             let dependencyToolchains = dependencySettings.toolchains
+            let configuredArchitecture = ct.parameters.activeArchitecture
+                ?? ct.parameters.activeRunDestination?.targetArchitecture
+                ?? dependencySettings.globalScope.evaluate(BuiltinMacros.ARCHS).only
             guard Ref(dependencyPlatform) == platform && dependencySdkVariant == sdkVariant else { return false }
+            let canShareCanonicalSDKConfiguration = explicitSDKRoot == settings.platform?.sdkCanonicalName
+                && requestedArchitecture == configuredArchitecture
             // An explicit SDKROOT is an exact specialization request even for
             // virtual package-product targets, whose own SDKROOT is not
             // necessarily `auto`. Reusing a destination-configured package
             // product here would make its members destination dependencies of
             // a host build tool.
-            if let explicitSDKRoot {
+            if let explicitSDKRoot, !canShareCanonicalSDKConfiguration {
                 let configuredSDKRoot = ct.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
                     ?? dependencySettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
                 guard configuredSDKRoot == explicitSDKRoot else { return false }
@@ -776,7 +814,7 @@ extension SpecializationParameters {
                 } else {
                     sdksMatch = dependencySettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str == sdkRoot
                 }
-                if !sdksMatch || settings.toolchains != dependencyToolchains {
+                if (!sdksMatch && !canShareCanonicalSDKConfiguration) || settings.toolchains != dependencyToolchains {
                     return false
                 }
             }
@@ -808,10 +846,16 @@ extension SpecializationParameters {
                 let currentSettings = buildRequestContext.getCachedSettings(parameters, target: target)
                 let targetHasAutoSDKRoot = buildRequestContext.getCachedSettings(parameters.withoutOverrides, target: target).enableTargetPlatformSpecialization
                 let explicitSDKRoot = parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
+                let requestedArchitecture = parameters.activeArchitecture
+                    ?? parameters.activeRunDestination?.targetArchitecture
+                    ?? currentSettings.globalScope.evaluate(BuiltinMacros.ARCHS).only
 
                 var hasMultipleTargets = false
                 for previousConfiguredTarget in previousConfiguredTargets {
                     let previousSettings = buildRequestContext.getCachedSettings(previousConfiguredTarget.parameters, target: previousConfiguredTarget.target)
+                    let previousArchitecture = previousConfiguredTarget.parameters.activeArchitecture
+                        ?? previousConfiguredTarget.parameters.activeRunDestination?.targetArchitecture
+                        ?? previousSettings.globalScope.evaluate(BuiltinMacros.ARCHS).only
                     if currentSettings.platform?.displayName == previousSettings.platform?.displayName && currentSettings.sdkVariant?.name == previousSettings.sdkVariant?.name {
                         // Allow multiple configured targets with separate run destinations (this is only the case for
                         // the workspace build description today).
@@ -823,16 +867,20 @@ extension SpecializationParameters {
                         if currentSettings.sdk?.canonicalNameSuffix != previousSettings.sdk?.canonicalNameSuffix {
                             continue
                         }
-                        // A target with SDKROOT=auto can be required by both a host-tool graph and a destination graph on the same platform.
-                        // Different exact SDK roots make those configurations meaningfully distinct even when neither root is a registered SDK.
-                        if targetHasAutoSDKRoot && currentSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str != previousSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str {
-                            continue
-                        }
                         // Package-product targets can receive an exact SDKROOT
                         // specialization even when their own SDKROOT is not
                         // automatic. That explicit selection is a distinct
                         // configuration on the same platform.
-                        if let explicitSDKRoot {
+                        let canShareCanonicalSDKConfiguration = explicitSDKRoot == currentSettings.platform?.sdkCanonicalName
+                            && requestedArchitecture == previousArchitecture
+                        // A target with SDKROOT=auto can be required by both a host-tool graph and a destination graph on the same platform.
+                        // Different exact SDK roots make those configurations meaningfully distinct even when neither root is a registered SDK.
+                        if targetHasAutoSDKRoot
+                            && !canShareCanonicalSDKConfiguration
+                            && currentSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str != previousSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str {
+                            continue
+                        }
+                        if let explicitSDKRoot, !canShareCanonicalSDKConfiguration {
                             let previousSDKRoot = previousConfiguredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
                                 ?? previousSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
                             if previousSDKRoot != explicitSDKRoot {
@@ -988,7 +1036,7 @@ extension SpecializationParameters {
         // Compute whether the target has expressed an opinion about requiring a suffixed sdk.
         let imposedCanonicalNameSuffix: String?
         if shouldImposePlatform {
-            let initialFilteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkRoot: specialization.sdkRoot, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: nil, canonicalNameSuffix: nil)
+            let initialFilteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, architecture: specialization.architecture, sdkRoot: specialization.sdkRoot, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: nil, canonicalNameSuffix: nil)
             let initialSettings = buildRequestContext.getCachedSettings(initialFilteredSpecialization.imposed(on: parameters, workspaceContext: workspaceContext), target: forTarget)
             let specializationSDKOptions = initialSettings.globalScope.evaluate(BuiltinMacros.SPECIALIZATION_SDK_OPTIONS)
             if specializationIsSupported {
@@ -1047,7 +1095,7 @@ extension SpecializationParameters {
         // If we are imposing a platform, we also need to impose the toolchain, but skip it if the explicit setting already matches what we would impose.
         let imposedToolchain: [String]?
         if shouldImposePlatform && specializationIsSupported {
-            let specializationWithoutToolchainImposition = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkRoot: specialization.sdkRoot, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: nil, canonicalNameSuffix: imposedCanonicalNameSuffix)
+            let specializationWithoutToolchainImposition = SpecializationParameters(source: .synthesized, platform: imposedPlatform, architecture: specialization.architecture, sdkRoot: specialization.sdkRoot, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: nil, canonicalNameSuffix: imposedCanonicalNameSuffix)
             let settingsWithToolchainImposition = buildRequestContext.getCachedSettings(specializationWithoutToolchainImposition.imposed(on: parameters, workspaceContext: workspaceContext), target: forTarget)
             let configuredToolchains = settingsWithToolchainImposition.toolchains.map({ $0.identifier })
             if let specializedToolchains = specialization.toolchain, configuredToolchains == specializedToolchains {
@@ -1071,7 +1119,7 @@ extension SpecializationParameters {
             imposedSwiftCompileCache = nil
         }
 
-        let filteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, sdkRoot: specialization.sdkRoot, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: imposedToolchain, canonicalNameSuffix: imposedCanonicalNameSuffix, swiftCompileCache: imposedSwiftCompileCache, superimposedProperties: specialization.superimposedProperties)
+        let filteredSpecialization = SpecializationParameters(source: .synthesized, platform: imposedPlatform, architecture: specialization.architecture, sdkRoot: specialization.sdkRoot, sdkVariant: imposedSdkVariant, supportedPlatforms: imposedSupportedPlatforms, toolchain: imposedToolchain, canonicalNameSuffix: imposedCanonicalNameSuffix, swiftCompileCache: imposedSwiftCompileCache, superimposedProperties: specialization.superimposedProperties)
 
         // Otherwise, we need to create a new specialization; do so by imposing the specialization on the build parameters.
         // NOTE: If the target doesn't support specialization, then unless the target comes from a package, then it's important to **not** impart those settings unless they are coming from overrides. Doing so has the side-effect of causing dependencies of downstream targets to be specialized incorrectly (e.g. a specialized target shouldn't cause its own dependencies to be specialized).
