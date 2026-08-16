@@ -840,10 +840,12 @@ fileprivate extension TargetDependencyResolver {
                     continue
                 }
 
-                // If we have an existing, compatible configured target, use its build parameters.
-                // But, if the imposedParameters include superimposedProperties, then we always want to look up a new configured target.
-                // FIXME: This logic could likely take superimposed properties into account to even further reduce creating duplicate targets, but presently extracting that info from ConfiguredTarget is not easy to do in a generic manner.  It's also unlikely to yield large performance wins.
-                if imposedParameters?.superimposedProperties == nil, let compatibleTarget = resolver.compatibleConfiguredTarget(dependency, for: configuredTarget.parameters, baseTarget: configuredTarget.target) {
+                // An imposed specialization is the authoritative context for
+                // resolving this edge. Comparing existing targets only against
+                // the parent's stored parameters can select a host-specialized
+                // dependency for a cross-compiled package target when both
+                // configurations already exist.
+                if imposedParameters == nil, let compatibleTarget = resolver.compatibleConfiguredTarget(dependency, for: configuredTarget.parameters, baseTarget: configuredTarget.target) {
                     immediateDependencies.append(ResolvedTargetDependency(target: compatibleTarget, reason: .explicit))
                 } else {
                     let buildParameters = resolver.buildParametersByTarget[dependency] ?? configuredTarget.parameters

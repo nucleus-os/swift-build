@@ -740,6 +740,24 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         "HostTool",
                         "HostToolDependency",
                     ]),
+                    TestPackageProductTarget(
+                        "DestinationProduct",
+                        frameworksBuildPhase: TestFrameworksBuildPhase([
+                            TestBuildFile(.target("HostToolDependency")),
+                            TestBuildFile(.target("DestinationConsumer")),
+                        ]),
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto",
+                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)",
+                                ])
+                        ],
+                        dependencies: [
+                            "HostToolDependency",
+                            "DestinationConsumer",
+                        ]),
                     TestStandardTarget("HostToolDependency", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
                             "Debug",
@@ -798,7 +816,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["library.swift"])
                     ], dependencies: [
-                        "DestinationConsumer",
+                        "DestinationProduct",
                         "HostPlugin"
                     ]),
                 ])
@@ -886,6 +904,25 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                 }
                 #expect(destinationHostToolDependency?.parameters.activeRunDestination == destination)
                 #expect(destinationHostToolDependency?.guid != hostToolDependency?.guid)
+                if let destinationConsumer, let destinationHostToolDependency, let hostToolDependency {
+                    let destinationModulesReady = results.getTask(
+                        .matchTarget(destinationHostToolDependency),
+                        .matchRuleType("Gate"),
+                        .matchRuleItemPattern(.suffix("-modules-ready")))
+                    let hostModulesReady = results.getTask(
+                        .matchTarget(hostToolDependency),
+                        .matchRuleType("Gate"),
+                        .matchRuleItemPattern(.suffix("-modules-ready")))
+                    results.checkTask(
+                        .matchTarget(destinationConsumer),
+                        .matchRuleType("Gate"),
+                        .matchRuleItemPattern(.suffix("-begin-compiling"))
+                    ) { beginCompiling in
+                        let directInputNames = Set(beginCompiling.inputs.map(\.name))
+                        #expect(destinationModulesReady?.outputs.contains { directInputNames.contains($0.name) } == true)
+                        #expect(hostModulesReady?.outputs.contains { directInputNames.contains($0.name) } == false)
+                    }
+                }
                 let sharedDependencyProduct = hostToolDependency.flatMap { dependency in
                     graph.dependencies(of: dependency).first {
                         $0.target.name == "SharedDependencyProduct"
@@ -904,6 +941,38 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     }
                 }
                 #expect(destinationDependencyProduct?.guid == destinationSharedDependencyProduct?.guid)
+                let hostSharedDependency = sharedDependencyProduct.flatMap { product in
+                    graph.dependencies(of: product).first {
+                        $0.target.name == "SharedDependency"
+                    }
+                }
+                let destinationSharedDependency = destinationDependencyProduct.flatMap { product in
+                    graph.dependencies(of: product).first {
+                        $0.target.name == "SharedDependency"
+                    }
+                }
+                #expect(hostSharedDependency?.parameters.activeArchitecture == Architecture.hostStringValue)
+                #expect(destinationSharedDependency?.parameters.activeRunDestination == destination)
+                #expect(hostSharedDependency?.guid != destinationSharedDependency?.guid)
+
+                if let destinationHostToolDependency, let destinationSharedDependency, let hostSharedDependency {
+                    results.checkTask(
+                        .matchTarget(destinationHostToolDependency),
+                        .matchRuleType("Gate"),
+                        .matchRuleItemPattern(.suffix("-begin-compiling"))
+                    ) { beginCompiling in
+                        results.checkTaskFollows(
+                            beginCompiling,
+                            .matchTarget(destinationSharedDependency),
+                            .matchRuleType("Gate"),
+                            .matchRuleItemPattern(.suffix("-modules-ready")))
+                        results.checkTaskDoesNotFollow(
+                            beginCompiling,
+                            .matchTarget(hostSharedDependency),
+                            .matchRuleType("Gate"),
+                            .matchRuleItemPattern(.suffix("-modules-ready")))
+                    }
+                }
 
                 results.checkTarget("Library") { libraryTarget in
                     results.checkTask(.matchTarget(libraryTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
