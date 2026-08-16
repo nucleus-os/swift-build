@@ -737,8 +737,8 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["destination.swift"])
                     ], dependencies: [
-                        "HostToolDependency",
                         "HostTool",
+                        "HostToolDependency",
                     ]),
                     TestStandardTarget("HostToolDependency", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
@@ -876,6 +876,16 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         && $0.parameters.activeArchitecture == Architecture.hostStringValue
                 }
                 #expect(hostToolDependency != nil)
+                let destinationConsumer = graph.allTargets.first {
+                    $0.target.name == "DestinationConsumer"
+                }
+                let destinationHostToolDependency = destinationConsumer.flatMap { consumer in
+                    graph.dependencies(of: consumer).first {
+                        $0.target.name == "HostToolDependency"
+                    }
+                }
+                #expect(destinationHostToolDependency?.parameters.activeRunDestination == destination)
+                #expect(destinationHostToolDependency?.guid != hostToolDependency?.guid)
                 let sharedDependencyProduct = hostToolDependency.flatMap { dependency in
                     graph.dependencies(of: dependency).first {
                         $0.target.name == "SharedDependencyProduct"
@@ -888,6 +898,12 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         && $0.parameters.activeRunDestination != nil
                 }
                 #expect(sharedDependencyProduct?.guid != destinationSharedDependencyProduct?.guid)
+                let destinationDependencyProduct = destinationHostToolDependency.flatMap { dependency in
+                    graph.dependencies(of: dependency).first {
+                        $0.target.name == "SharedDependencyProduct"
+                    }
+                }
+                #expect(destinationDependencyProduct?.guid == destinationSharedDependencyProduct?.guid)
 
                 results.checkTarget("Library") { libraryTarget in
                     results.checkTask(.matchTarget(libraryTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in

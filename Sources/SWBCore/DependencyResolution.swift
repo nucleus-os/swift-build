@@ -789,10 +789,12 @@ extension SpecializationParameters {
                 ?? ct.parameters.activeRunDestination?.targetArchitecture
                 ?? dependencySettings.globalScope.evaluate(BuiltinMacros.ARCHS).only
             guard Ref(dependencyPlatform) == platform && dependencySdkVariant == sdkVariant else { return false }
-            if parameters.activeArchitecture != nil && requestedArchitecture != configuredArchitecture {
+            let hasExplicitArchitecture = parameters.activeArchitecture != nil
+                || ct.parameters.activeArchitecture != nil
+            if hasExplicitArchitecture && requestedArchitecture != configuredArchitecture {
                 return false
             }
-            let canShareHostSDKConfiguration = parameters.activeArchitecture != nil
+            let canShareHostSDKConfiguration = hasExplicitArchitecture
                 && requestedArchitecture == configuredArchitecture
             // An explicit SDKROOT is an exact specialization request even for
             // virtual package-product targets, whose own SDKROOT is not
@@ -864,7 +866,9 @@ extension SpecializationParameters {
                         if previousConfiguredTarget.specializeGuidForActiveRunDestination && parameters.activeRunDestination != previousConfiguredTarget.parameters.activeRunDestination {
                             continue
                         }
-                        if parameters.activeArchitecture != nil && requestedArchitecture != previousArchitecture {
+                        let hasExplicitArchitecture = parameters.activeArchitecture != nil
+                            || previousConfiguredTarget.parameters.activeArchitecture != nil
+                        if hasExplicitArchitecture && requestedArchitecture != previousArchitecture {
                             continue
                         }
                         // We allow multiple configured targets with different SDK suffixes, this gets sorted out at the very
@@ -876,7 +880,7 @@ extension SpecializationParameters {
                         // specialization even when their own SDKROOT is not
                         // automatic. That explicit selection is a distinct
                         // configuration on the same platform.
-                        let canShareHostSDKConfiguration = parameters.activeArchitecture != nil
+                        let canShareHostSDKConfiguration = hasExplicitArchitecture
                             && requestedArchitecture == previousArchitecture
                         // A target with SDKROOT=auto can be required by both a host-tool graph and a destination graph on the same platform.
                         // Different exact SDK roots make those configurations meaningfully distinct even when neither root is a registered SDK.
