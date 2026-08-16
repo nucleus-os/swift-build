@@ -847,6 +847,20 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
             await tester.checkBuild(parameters, runDestination: nil, targetName: "Library", fs: localFS) { results in
                 results.checkNoDiagnostics()
 
+                let graph = results.buildPlanRequest.buildGraph
+                let hostToolDependency = graph.allTargets.first {
+                    $0.target.name == "HostToolDependency"
+                        && $0.parameters.overrides["SDKROOT"] != nil
+                }
+                let hostSDKRoot = hostToolDependency?.parameters.overrides["SDKROOT"]
+                #expect(hostSDKRoot != nil)
+                let sharedDependencyProduct = hostToolDependency.flatMap { dependency in
+                    graph.dependencies(of: dependency).first {
+                        $0.target.name == "SharedDependencyProduct"
+                    }
+                }
+                #expect(sharedDependencyProduct?.parameters.overrides["SDKROOT"] == hostSDKRoot)
+
                 results.checkTarget("Library") { libraryTarget in
                     results.checkTask(.matchTarget(libraryTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
                         compileTask.checkCommandLineContains([
