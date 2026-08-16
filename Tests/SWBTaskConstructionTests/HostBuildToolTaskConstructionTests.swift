@@ -723,14 +723,6 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         frameworksBuildPhase: TestFrameworksBuildPhase([
                             TestBuildFile(.target("SharedDependency"))
                         ]),
-                        buildConfigurations: [
-                            TestBuildConfiguration(
-                                "Debug",
-                                buildSettings: [
-                                    "SDKROOT": "auto",
-                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
-                                ])
-                        ],
                         dependencies: [
                             "SharedDependency"
                         ]),

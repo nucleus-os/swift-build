@@ -741,6 +741,7 @@ extension SpecializationParameters {
         let sdkVariant = settings.sdkVariant?.name
         let sdk = settings.sdk
         let sdkRoot = settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str
+        let explicitSDKRoot = parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
         let unimposedSettingsOfDependency = buildRequestContext.getCachedSettings(parameters.withoutOverrides, target: dependency)
         let dependencyHasAutoSDKRoot = unimposedSettingsOfDependency.enableTargetPlatformSpecialization
 
@@ -753,6 +754,16 @@ extension SpecializationParameters {
             let dependencySdkVariant = dependencySettings.sdkVariant?.name
             let dependencyToolchains = dependencySettings.toolchains
             guard Ref(dependencyPlatform) == platform && dependencySdkVariant == sdkVariant else { return false }
+            // An explicit SDKROOT is an exact specialization request even for
+            // virtual package-product targets, whose own SDKROOT is not
+            // necessarily `auto`. Reusing a destination-configured package
+            // product here would make its members destination dependencies of
+            // a host build tool.
+            if let explicitSDKRoot {
+                let configuredSDKRoot = ct.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
+                    ?? dependencySettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
+                guard configuredSDKRoot == explicitSDKRoot else { return false }
+            }
             // For dependencies with 'auto' SDKROOT, they get their SDK 'imposed', including if it is internal vs public SDK, not just what platform it is.
             // For such dependencies also confirm that the existing configured dependency matches 'internal vs public' for the SDK. An exact
             // SDKROOT must be compared when either side is not registered, as happens when a Linux host tool and a cross-compilation destination
@@ -796,6 +807,7 @@ extension SpecializationParameters {
             if let previousConfiguredTargets = configuredTargetsByTarget[target] {
                 let currentSettings = buildRequestContext.getCachedSettings(parameters, target: target)
                 let targetHasAutoSDKRoot = buildRequestContext.getCachedSettings(parameters.withoutOverrides, target: target).enableTargetPlatformSpecialization
+                let explicitSDKRoot = parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
 
                 var hasMultipleTargets = false
                 for previousConfiguredTarget in previousConfiguredTargets {
@@ -815,6 +827,17 @@ extension SpecializationParameters {
                         // Different exact SDK roots make those configurations meaningfully distinct even when neither root is a registered SDK.
                         if targetHasAutoSDKRoot && currentSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str != previousSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str {
                             continue
+                        }
+                        // Package-product targets can receive an exact SDKROOT
+                        // specialization even when their own SDKROOT is not
+                        // automatic. That explicit selection is a distinct
+                        // configuration on the same platform.
+                        if let explicitSDKRoot {
+                            let previousSDKRoot = previousConfiguredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
+                                ?? previousSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
+                            if previousSDKRoot != explicitSDKRoot {
+                                continue
+                            }
                         }
 
                         let behavior: Diagnostic.Behavior = buildRequest.enableIndexBuildArena ? .warning : .error
