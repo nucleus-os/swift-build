@@ -862,10 +862,14 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                 results.checkNoDiagnostics()
 
                 let graph = results.buildPlanRequest.buildGraph
-                let hostToolCount = graph.allTargets.filter {
+                let hostTools = graph.allTargets.filter {
                     $0.target.name == "HostTool"
-                }.count
-                #expect(hostToolCount == 1)
+                }
+                #expect(hostTools.count == 1)
+                #expect(hostTools.first?.parameters.activeRunDestination == nil)
+                #expect(
+                    hostTools.first?.parameters.activeArchitecture
+                        == Architecture.hostStringValue)
                 let hostToolDependency = graph.allTargets.first {
                     $0.target.name == "HostToolDependency"
                         && $0.parameters.activeRunDestination == nil
