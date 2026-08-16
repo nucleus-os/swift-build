@@ -901,6 +901,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             compileTask.checkCommandLineDoesNotContain("-sdk")
                             compileTask.checkCommandLineDoesNotContain("-sysroot")
                             compileTask.checkCommandLineNoMatch(["-resource-dir", .equal(destinationSwiftResources.str)])
+                            compileTask.checkCommandLineDoesNotContain(destinationSDKRoot.str)
                         }
                     }
                     #expect(destinationCompileCount == 1)
@@ -921,6 +922,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             compileTask.checkCommandLineDoesNotContain("-sdk")
                             compileTask.checkCommandLineDoesNotContain("-sysroot")
                             compileTask.checkCommandLineNoMatch(["-resource-dir", .equal(destinationSwiftResources.str)])
+                            compileTask.checkCommandLineDoesNotContain(destinationSDKRoot.str)
                         }
                     }
                     #expect(destinationCompileCount == 1)

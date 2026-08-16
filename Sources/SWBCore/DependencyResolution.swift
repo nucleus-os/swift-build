@@ -228,8 +228,7 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
             // the native-build case; creating both configurations would give
             // them identical output paths. Cross builds still require a
             // distinct host dependency graph.
-            sdkRootsAreCompatible = sdkRoot == settings.platform?.sdkCanonicalName
-                && architecture != nil
+            sdkRootsAreCompatible = architecture != nil
                 && architecture == configuredArchitecture
         } else {
             sdkRootsAreCompatible = true
@@ -515,10 +514,10 @@ extension SpecializationParameters {
             let sdkRoot: String?
             if configuredTarget.target.isHostBuildTool {
                 // Host dependencies select the host SDK by dropping the active
-                // run destination when their executable architecture is
-                // imposed. Do not turn the canonical SDK name into an explicit
-                // path-like SDKROOT override.
-                sdkRoot = nil
+                // run destination when their executable architecture is imposed.
+                // Propagate the canonical host SDK selection so package targets
+                // with SDKROOT=`auto` resolve the registered fallback system SDK.
+                sdkRoot = scope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
             } else {
                 let evaluatedSDKRoot = scope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
                 sdkRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
@@ -793,14 +792,14 @@ extension SpecializationParameters {
             if parameters.activeArchitecture != nil && requestedArchitecture != configuredArchitecture {
                 return false
             }
-            let canShareCanonicalSDKConfiguration = explicitSDKRoot == settings.platform?.sdkCanonicalName
+            let canShareHostSDKConfiguration = parameters.activeArchitecture != nil
                 && requestedArchitecture == configuredArchitecture
             // An explicit SDKROOT is an exact specialization request even for
             // virtual package-product targets, whose own SDKROOT is not
             // necessarily `auto`. Reusing a destination-configured package
             // product here would make its members destination dependencies of
             // a host build tool.
-            if let explicitSDKRoot, !canShareCanonicalSDKConfiguration {
+            if let explicitSDKRoot, !canShareHostSDKConfiguration {
                 let configuredSDKRoot = ct.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
                     ?? dependencySettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
                 guard configuredSDKRoot == explicitSDKRoot else { return false }
@@ -817,7 +816,7 @@ extension SpecializationParameters {
                 } else {
                     sdksMatch = dependencySettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str == sdkRoot
                 }
-                if (!sdksMatch && !canShareCanonicalSDKConfiguration) || settings.toolchains != dependencyToolchains {
+                if (!sdksMatch && !canShareHostSDKConfiguration) || settings.toolchains != dependencyToolchains {
                     return false
                 }
             }
@@ -877,16 +876,16 @@ extension SpecializationParameters {
                         // specialization even when their own SDKROOT is not
                         // automatic. That explicit selection is a distinct
                         // configuration on the same platform.
-                        let canShareCanonicalSDKConfiguration = explicitSDKRoot == currentSettings.platform?.sdkCanonicalName
+                        let canShareHostSDKConfiguration = parameters.activeArchitecture != nil
                             && requestedArchitecture == previousArchitecture
                         // A target with SDKROOT=auto can be required by both a host-tool graph and a destination graph on the same platform.
                         // Different exact SDK roots make those configurations meaningfully distinct even when neither root is a registered SDK.
                         if targetHasAutoSDKRoot
-                            && !canShareCanonicalSDKConfiguration
+                            && !canShareHostSDKConfiguration
                             && currentSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str != previousSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str {
                             continue
                         }
-                        if let explicitSDKRoot, !canShareCanonicalSDKConfiguration {
+                        if let explicitSDKRoot, !canShareHostSDKConfiguration {
                             let previousSDKRoot = previousConfiguredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
                                 ?? previousSettings.globalScope.evaluate(BuiltinMacros.SDKROOT).str.nilIfEmpty
                             if previousSDKRoot != explicitSDKRoot {
