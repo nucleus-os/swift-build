@@ -485,6 +485,34 @@ fileprivate extension TargetDependencyResolver {
             }
         }
 
+        // Discovery runs concurrently and may encounter a shared package
+        // target first through either a host-tool path or a destination path.
+        // Once every configured variant exists, make each non-host edge agree
+        // with the concrete context of its depender. Host build tools retain
+        // their explicitly selected executable configuration.
+        var canonicalDependenciesByConfiguredTarget = [ConfiguredTarget: OrderedSet<ResolvedTargetDependency>]()
+        for (configuredTarget, dependencies) in immediateDependenciesByConfiguredTarget! {
+            var canonicalDependencies = OrderedSet<ResolvedTargetDependency>()
+            for dependency in dependencies {
+                guard !dependency.target.target.isHostBuildTool,
+                      let compatibleTarget = resolver.compatibleConfiguredTarget(
+                          dependency.target.target,
+                          for: configuredTarget.parameters,
+                          baseTarget: configuredTarget.target),
+                      allTargets.contains(compatibleTarget)
+                else {
+                    canonicalDependencies.append(dependency)
+                    continue
+                }
+                canonicalDependencies.append(
+                    ResolvedTargetDependency(
+                        target: compatibleTarget,
+                        reason: dependency.reason))
+            }
+            canonicalDependenciesByConfiguredTarget[configuredTarget] = canonicalDependencies
+        }
+        immediateDependenciesByConfiguredTarget = canonicalDependenciesByConfiguredTarget
+
         // Construct the map of targets to their immediate resolved dependencies.
         var targetDependencies = [ConfiguredTarget: [ResolvedTargetDependency]]()
         var seenTargetIDs = [ConfiguredTarget.GUID: [ConfiguredTarget]]()
@@ -744,12 +772,7 @@ fileprivate extension TargetDependencyResolver {
 
         // Get the discovered target info, or create it if necessary (for targets not visited in the initial discovery, or when specialization has become active).
         let discoveredInfo: DiscoveredTargetInfo
-        // The discovery pre-pass stores only one dependency set per configured
-        // target. Even when an imposed specialization is compatible with that
-        // target, its cached dependencies may have been discovered through a
-        // different host or destination context. Re-resolve specialized edges
-        // so the dependency configurations follow the current traversal.
-        if let info = discoveredTargets[configuredTarget], imposedParameters == nil {
+        if let info = discoveredTargets[configuredTarget], imposedParameters == nil || imposedParameters?.isCompatible(with: configuredTarget, settings: buildRequestContext.getCachedSettings(configuredTarget.parameters, target: configuredTarget.target), workspaceContext: workspaceContext) == true {
             discoveredInfo = info
         } else {
             if resolver.makeAggregateTargetsTransparentForSpecialization {
