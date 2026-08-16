@@ -744,7 +744,12 @@ fileprivate extension TargetDependencyResolver {
 
         // Get the discovered target info, or create it if necessary (for targets not visited in the initial discovery, or when specialization has become active).
         let discoveredInfo: DiscoveredTargetInfo
-        if let info = discoveredTargets[configuredTarget], imposedParameters == nil || imposedParameters?.isCompatible(with: configuredTarget, settings: buildRequestContext.getCachedSettings(configuredTarget.parameters, target: configuredTarget.target), workspaceContext: workspaceContext) == true {
+        // The discovery pre-pass stores only one dependency set per configured
+        // target. Even when an imposed specialization is compatible with that
+        // target, its cached dependencies may have been discovered through a
+        // different host or destination context. Re-resolve specialized edges
+        // so the dependency configurations follow the current traversal.
+        if let info = discoveredTargets[configuredTarget], imposedParameters == nil {
             discoveredInfo = info
         } else {
             if resolver.makeAggregateTargetsTransparentForSpecialization {

@@ -690,35 +690,40 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
         try await withTemporaryDirectory { tmpDir in
             let swiftCompilerPath = try await self.swiftCompilerPath
             let swiftVersion = try await self.swiftVersion
-            let testProject = TestPackageProject(
-                "aProject",
-                groupTree: TestGroup("Foo", children: [
-                    TestFile("shared.swift"),
-                    TestFile("destination.swift"),
-                    TestFile("dep.swift"),
-                    TestFile("tool.swift"),
-                    TestFile("plugin.swift"),
-                    TestFile("library.swift"),
-                ]), buildConfigurations: [
+            let testPackage = TestPackageProject(
+                "aPackage",
+                groupTree: TestGroup(
+                    "Foo",
+                    children: [
+                        TestFile("shared.swift"),
+                        TestFile("destination.swift"),
+                        TestFile("dep.swift"),
+                        TestFile("tool.swift"),
+                        TestFile("plugin.swift"),
+                    ]),
+                buildConfigurations: [
                     TestBuildConfiguration(
                         "Debug",
                         buildSettings: [
                             "SWIFT_EXEC": swiftCompilerPath.str,
                             "SWIFT_VERSION": swiftVersion,
                             "PRODUCT_NAME": "$(TARGET_NAME)",
-                        ]),
+                        ])
                 ],
                 targets: [
-                    TestStandardTarget("SharedDependency", type: .staticLibrary, buildConfigurations: [
-                        TestBuildConfiguration(
-                            "Debug",
-                            buildSettings: [
-                                "SDKROOT": "auto",
-                                "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
-                            ]),
-                    ], buildPhases: [
-                        TestSourcesBuildPhase(["shared.swift"])
-                    ]),
+                    TestStandardTarget(
+                        "SharedDependency", type: .staticLibrary,
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto",
+                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)",
+                                ])
+                        ],
+                        buildPhases: [
+                            TestSourcesBuildPhase(["shared.swift"])
+                        ]),
                     TestPackageProductTarget(
                         "SharedDependencyProduct",
                         frameworksBuildPhase: TestFrameworksBuildPhase([
@@ -727,19 +732,23 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         dependencies: [
                             "SharedDependency"
                         ]),
-                    TestStandardTarget("DestinationConsumer", type: .staticLibrary, buildConfigurations: [
-                        TestBuildConfiguration(
-                            "Debug",
-                            buildSettings: [
-                                "SDKROOT": "auto",
-                                "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
-                            ]),
-                    ], buildPhases: [
-                        TestSourcesBuildPhase(["destination.swift"])
-                    ], dependencies: [
-                        "HostTool",
-                        "HostToolDependency",
-                    ]),
+                    TestStandardTarget(
+                        "DestinationConsumer", type: .staticLibrary,
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto",
+                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)",
+                                ])
+                        ],
+                        buildPhases: [
+                            TestSourcesBuildPhase(["destination.swift"])
+                        ],
+                        dependencies: [
+                            "HostTool",
+                            "HostToolDependency",
+                        ]),
                     TestPackageProductTarget(
                         "DestinationProduct",
                         frameworksBuildPhase: TestFrameworksBuildPhase([
@@ -758,18 +767,22 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             "HostToolDependency",
                             "DestinationConsumer",
                         ]),
-                    TestStandardTarget("HostToolDependency", type: .staticLibrary, buildConfigurations: [
-                        TestBuildConfiguration(
-                            "Debug",
-                            buildSettings: [
-                                "SDKROOT": "auto",
-                                "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
-                            ]),
-                    ], buildPhases: [
-                        TestSourcesBuildPhase(["dep.swift"])
-                    ], dependencies: [
-                        "SharedDependencyProduct"
-                    ]),
+                    TestStandardTarget(
+                        "HostToolDependency", type: .staticLibrary,
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto",
+                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)",
+                                ])
+                        ],
+                        buildPhases: [
+                            TestSourcesBuildPhase(["dep.swift"])
+                        ],
+                        dependencies: [
+                            "SharedDependencyProduct"
+                        ]),
                     TestPackageProductTarget(
                         "HostToolDependencyProduct",
                         frameworksBuildPhase: TestFrameworksBuildPhase([
@@ -780,47 +793,80 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                                 "Debug",
                                 buildSettings: [
                                     "SDKROOT": "auto",
-                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
+                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)",
                                 ])
                         ],
                         dependencies: [
                             "HostToolDependency"
                         ]),
-                    TestStandardTarget("HostTool", type: .hostBuildTool, buildConfigurations: [
-                        TestBuildConfiguration(
-                            "Debug",
-                            buildSettings: [
-                                "SDKROOT": "auto",
-                            ])], buildPhases: [
-                                TestSourcesBuildPhase(["tool.swift"])
-                            ], dependencies: [
-                                "HostToolDependencyProduct"
-                            ]),
-                    TestStandardTarget("HostPlugin", type: .hostBuildTool, buildConfigurations: [
-                        TestBuildConfiguration(
-                            "Debug",
-                            buildSettings: [
-                                "SDKROOT": "auto",
-                            ])], buildPhases: [
-                                TestSourcesBuildPhase(["plugin.swift"])
-                            ], dependencies: [
-                                "HostTool"
-                            ]),
-                    TestStandardTarget("Library", type: .staticLibrary, buildConfigurations: [
-                        TestBuildConfiguration(
-                            "Debug",
-                            buildSettings: [
-                                "SDKROOT": "auto",
-                                "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)"
-                            ]),
-                    ], buildPhases: [
-                        TestSourcesBuildPhase(["library.swift"])
-                    ], dependencies: [
-                        "DestinationProduct",
-                        "HostPlugin"
-                    ]),
+                    TestStandardTarget(
+                        "HostTool", type: .hostBuildTool,
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto"
+                                ])
+                        ],
+                        buildPhases: [
+                            TestSourcesBuildPhase(["tool.swift"])
+                        ],
+                        dependencies: [
+                            "HostToolDependencyProduct"
+                        ]),
+                    TestStandardTarget(
+                        "HostPlugin", type: .hostBuildTool,
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto"
+                                ])
+                        ],
+                        buildPhases: [
+                            TestSourcesBuildPhase(["plugin.swift"])
+                        ],
+                        dependencies: [
+                            "HostTool"
+                        ]),
                 ])
-            let testWorkspace = TestWorkspace("aWorkspace", projects: [testProject])
+            let testProject = TestProject(
+                "aProject",
+                groupTree: TestGroup(
+                    "Root",
+                    children: [
+                        TestFile("library.swift")
+                    ]),
+                buildConfigurations: [
+                    TestBuildConfiguration(
+                        "Debug",
+                        buildSettings: [
+                            "SWIFT_EXEC": swiftCompilerPath.str,
+                            "SWIFT_VERSION": swiftVersion,
+                            "PRODUCT_NAME": "$(TARGET_NAME)",
+                        ])
+                ],
+                targets: [
+                    TestAggregateTarget("All", dependencies: ["Library"]),
+                    TestStandardTarget(
+                        "Library", type: .staticLibrary,
+                        buildConfigurations: [
+                            TestBuildConfiguration(
+                                "Debug",
+                                buildSettings: [
+                                    "SDKROOT": "auto",
+                                    "SUPPORTED_PLATFORMS": "$(AVAILABLE_PLATFORMS)",
+                                ])
+                        ],
+                        buildPhases: [
+                            TestSourcesBuildPhase(["library.swift"])
+                        ],
+                        dependencies: [
+                            "DestinationProduct",
+                            "HostPlugin",
+                        ]),
+                ])
+            let testWorkspace = TestWorkspace("aWorkspace", projects: [testProject, testPackage])
 
             // Use a dedicated core so the SDK registered below cannot affect other tests.
             let core = try await Self.makeCore()
@@ -834,29 +880,30 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
             let nativeTriple = "\(nativeArchitecture)-swift-linux-musl"
             let sdkManifestPath = tmpDir.join("swift-sdk.json")
             try await localFS.writeFileContents(sdkManifestPath, waitForNewTimestamp: false) { stream in
-                stream.write("""
-                {
-                    "schemaVersion": "4.0",
-                    "targetTriples": {
-                        "\(destinationTriple)": {
-                            "toolsetPaths": [
-                                "toolset.json"
-                            ],
-                            "sdkRootPath": "musl-1.2.5.sdk/\(destinationArchitecture)",
-                            "swiftResourcesPath": "musl-1.2.5.sdk/\(destinationArchitecture)/usr/lib/swift_static",
-                            "swiftStaticResourcesPath": "musl-1.2.5.sdk/\(destinationArchitecture)/usr/lib/swift_static"
-                        },
-                        "\(nativeTriple)": {
-                            "toolsetPaths": [
-                                "toolset.json"
-                            ],
-                            "sdkRootPath": "musl-1.2.5.sdk/\(nativeArchitecture)",
-                            "swiftResourcesPath": "musl-1.2.5.sdk/\(nativeArchitecture)/usr/lib/swift_static",
-                            "swiftStaticResourcesPath": "musl-1.2.5.sdk/\(nativeArchitecture)/usr/lib/swift_static"
+                stream.write(
+                    """
+                    {
+                        "schemaVersion": "4.0",
+                        "targetTriples": {
+                            "\(destinationTriple)": {
+                                "toolsetPaths": [
+                                    "toolset.json"
+                                ],
+                                "sdkRootPath": "musl-1.2.5.sdk/\(destinationArchitecture)",
+                                "swiftResourcesPath": "musl-1.2.5.sdk/\(destinationArchitecture)/usr/lib/swift_static",
+                                "swiftStaticResourcesPath": "musl-1.2.5.sdk/\(destinationArchitecture)/usr/lib/swift_static"
+                            },
+                            "\(nativeTriple)": {
+                                "toolsetPaths": [
+                                    "toolset.json"
+                                ],
+                                "sdkRootPath": "musl-1.2.5.sdk/\(nativeArchitecture)",
+                                "swiftResourcesPath": "musl-1.2.5.sdk/\(nativeArchitecture)/usr/lib/swift_static",
+                                "swiftStaticResourcesPath": "musl-1.2.5.sdk/\(nativeArchitecture)/usr/lib/swift_static"
+                            }
                         }
                     }
-                }
-                """)
+                    """)
             }
             try await localFS.writeFileContents(tmpDir.join("toolset.json"), waitForNewTimestamp: false) { stream in
                 stream.write("""
@@ -876,7 +923,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                 core: core)
             let parameters = BuildParameters(configuration: "Debug", activeRunDestination: destination)
 
-            await tester.checkBuild(parameters, runDestination: nil, targetName: "Library", fs: localFS) { results in
+            await tester.checkBuild(parameters, runDestination: nil, targetName: "All", fs: localFS) { results in
                 results.checkNoDiagnostics()
 
                 let graph = results.buildPlanRequest.buildGraph
