@@ -495,11 +495,11 @@ fileprivate extension TargetDependencyResolver {
             var canonicalDependencies = OrderedSet<ResolvedTargetDependency>()
             for dependency in dependencies {
                 guard !dependency.target.target.isHostBuildTool,
-                      let compatibleTarget = resolver.compatibleConfiguredTarget(
-                          dependency.target.target,
-                          for: configuredTarget.parameters,
-                          baseTarget: configuredTarget.target),
-                      allTargets.contains(compatibleTarget)
+                    let compatibleTarget = await resolver.compatibleConfiguredTarget(
+                        dependency.target.target,
+                        for: configuredTarget.parameters,
+                        baseTarget: configuredTarget.target),
+                    allTargets.contains(compatibleTarget)
                 else {
                     canonicalDependencies.append(dependency)
                     continue

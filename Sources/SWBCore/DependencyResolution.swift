@@ -1325,7 +1325,7 @@ extension Platform {
     }
 }
 
-fileprivate extension Target {
+extension Target {
     var isHostBuildTool: Bool {
         guard let standardTarget = self as? StandardTarget else { return false }
         return ProductTypeIdentifier(standardTarget.productTypeIdentifier).isHostBuildTool
