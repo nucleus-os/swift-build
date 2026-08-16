@@ -697,6 +697,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     TestFile("destination.swift"),
                     TestFile("dep.swift"),
                     TestFile("tool.swift"),
+                    TestFile("plugin.swift"),
                     TestFile("library.swift"),
                 ]), buildConfigurations: [
                     TestBuildConfiguration(
@@ -736,7 +737,8 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     ], buildPhases: [
                         TestSourcesBuildPhase(["destination.swift"])
                     ], dependencies: [
-                        "HostToolDependency"
+                        "HostToolDependency",
+                        "HostTool",
                     ]),
                     TestStandardTarget("HostToolDependency", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
@@ -776,6 +778,16 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                             ], dependencies: [
                                 "HostToolDependencyProduct"
                             ]),
+                    TestStandardTarget("HostPlugin", type: .hostBuildTool, buildConfigurations: [
+                        TestBuildConfiguration(
+                            "Debug",
+                            buildSettings: [
+                                "SDKROOT": "auto",
+                            ])], buildPhases: [
+                                TestSourcesBuildPhase(["plugin.swift"])
+                            ], dependencies: [
+                                "HostTool"
+                            ]),
                     TestStandardTarget("Library", type: .staticLibrary, buildConfigurations: [
                         TestBuildConfiguration(
                             "Debug",
@@ -787,7 +799,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                         TestSourcesBuildPhase(["library.swift"])
                     ], dependencies: [
                         "DestinationConsumer",
-                        "HostTool"
+                        "HostPlugin"
                     ]),
                 ])
             let testWorkspace = TestWorkspace("aWorkspace", projects: [testProject])
@@ -802,7 +814,6 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
             let destinationSwiftResources = destinationSDKRoot.join("usr/lib/swift_static")
             let nativeArchitecture = try #require(Architecture.hostStringValue)
             let nativeTriple = "\(nativeArchitecture)-swift-linux-musl"
-            let nativeSDKRoot = tmpDir.join("musl-1.2.5.sdk").join(nativeArchitecture)
             let sdkManifestPath = tmpDir.join("swift-sdk.json")
             try await localFS.writeFileContents(sdkManifestPath, waitForNewTimestamp: false) { stream in
                 stream.write("""
@@ -851,6 +862,10 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                 results.checkNoDiagnostics()
 
                 let graph = results.buildPlanRequest.buildGraph
+                let hostToolCount = graph.allTargets.filter {
+                    $0.target.name == "HostTool"
+                }.count
+                #expect(hostToolCount == 1)
                 let hostToolDependency = graph.allTargets.first {
                     $0.target.name == "HostToolDependency"
                         && $0.parameters.activeRunDestination == nil
@@ -929,7 +944,7 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                     #expect(hostCompileCount == 1)
                 }
 
-                for targetName in ["HostTool"] {
+                for targetName in ["HostTool", "HostPlugin"] {
                     results.checkTarget(targetName) { hostTarget in
                         results.checkTask(.matchTarget(hostTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in
                             compileTask.checkCommandLineMatches(["-target", .contains("linux-gnu")])

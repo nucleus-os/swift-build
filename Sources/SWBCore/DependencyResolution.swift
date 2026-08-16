@@ -214,9 +214,10 @@ struct SpecializationParameters: Hashable, CustomStringConvertible {
     /// Check if a configured target can be used when this specialization is required.
     func isCompatible(with configuredTarget: ConfiguredTarget, settings: Settings, workspaceContext: WorkspaceContext) -> Bool {
         let toolchain = effectiveToolchainOverride(originalParameters: configuredTarget.parameters, workspaceContext: workspaceContext)
-        let configuredArchitecture = configuredTarget.parameters.activeArchitecture
-            ?? configuredTarget.parameters.activeRunDestination?.targetArchitecture
-            ?? settings.globalScope.evaluate(BuiltinMacros.ARCHS).only
+        let configuredArchitecture = resolvedArchitecture(
+            for: configuredTarget.target,
+            parameters: configuredTarget.parameters,
+            settings: settings)
         // Preserve the exact selection that specialization imposed even when
         // evaluating it resolves to a canonical SDK path.
         let configuredSDKRoot = configuredTarget.parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
@@ -771,9 +772,10 @@ extension SpecializationParameters {
         let sdk = settings.sdk
         let sdkRoot = settings.globalScope.evaluate(BuiltinMacros.SDKROOT).str
         let explicitSDKRoot = parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
-        let requestedArchitecture = parameters.activeArchitecture
-            ?? parameters.activeRunDestination?.targetArchitecture
-            ?? settings.globalScope.evaluate(BuiltinMacros.ARCHS).only
+        let requestedArchitecture = resolvedArchitecture(
+            for: baseTarget,
+            parameters: parameters,
+            settings: settings)
         let unimposedSettingsOfDependency = buildRequestContext.getCachedSettings(parameters.withoutOverrides, target: dependency)
         let dependencyHasAutoSDKRoot = unimposedSettingsOfDependency.enableTargetPlatformSpecialization
 
@@ -785,9 +787,10 @@ extension SpecializationParameters {
             let dependencyPlatform = dependencySettings.platform
             let dependencySdkVariant = dependencySettings.sdkVariant?.name
             let dependencyToolchains = dependencySettings.toolchains
-            let configuredArchitecture = ct.parameters.activeArchitecture
-                ?? ct.parameters.activeRunDestination?.targetArchitecture
-                ?? dependencySettings.globalScope.evaluate(BuiltinMacros.ARCHS).only
+            let configuredArchitecture = resolvedArchitecture(
+                for: ct.target,
+                parameters: ct.parameters,
+                settings: dependencySettings)
             guard Ref(dependencyPlatform) == platform && dependencySdkVariant == sdkVariant else { return false }
             if parameters.activeArchitecture != nil && requestedArchitecture != configuredArchitecture {
                 return false
@@ -848,16 +851,18 @@ extension SpecializationParameters {
                 let currentSettings = buildRequestContext.getCachedSettings(parameters, target: target)
                 let targetHasAutoSDKRoot = buildRequestContext.getCachedSettings(parameters.withoutOverrides, target: target).enableTargetPlatformSpecialization
                 let explicitSDKRoot = parameters.overrides[BuiltinMacros.SDKROOT.name]?.nilIfEmpty
-                let requestedArchitecture = parameters.activeArchitecture
-                    ?? parameters.activeRunDestination?.targetArchitecture
-                    ?? currentSettings.globalScope.evaluate(BuiltinMacros.ARCHS).only
+                let requestedArchitecture = resolvedArchitecture(
+                    for: target,
+                    parameters: parameters,
+                    settings: currentSettings)
 
                 var hasMultipleTargets = false
                 for previousConfiguredTarget in previousConfiguredTargets {
                     let previousSettings = buildRequestContext.getCachedSettings(previousConfiguredTarget.parameters, target: previousConfiguredTarget.target)
-                    let previousArchitecture = previousConfiguredTarget.parameters.activeArchitecture
-                        ?? previousConfiguredTarget.parameters.activeRunDestination?.targetArchitecture
-                        ?? previousSettings.globalScope.evaluate(BuiltinMacros.ARCHS).only
+                    let previousArchitecture = resolvedArchitecture(
+                        for: previousConfiguredTarget.target,
+                        parameters: previousConfiguredTarget.parameters,
+                        settings: previousSettings)
                     if currentSettings.platform?.displayName == previousSettings.platform?.displayName && currentSettings.sdkVariant?.name == previousSettings.sdkVariant?.name {
                         // Allow multiple configured targets with separate run destinations (this is only the case for
                         // the workspace build description today).
@@ -1271,6 +1276,22 @@ extension Platform {
         // FIXME: Do we need a better way to find the "right" SDK here? Seems to work fine for macOS right now.
         return sdks.filter { $0.isBaseSDK && $0.canonicalName.hasPrefix(sdkCanonicalName) }.first?.defaultVariant
     }
+}
+
+private func resolvedArchitecture(
+    for target: Target,
+    parameters: BuildParameters,
+    settings: Settings
+) -> String? {
+    if let activeArchitecture = parameters.activeArchitecture {
+        return activeArchitecture
+    }
+    if !target.isHostBuildTool,
+       let destinationArchitecture = parameters.activeRunDestination?.targetArchitecture
+    {
+        return destinationArchitecture
+    }
+    return settings.globalScope.evaluate(BuiltinMacros.ARCHS).only
 }
 
 fileprivate extension Target {
