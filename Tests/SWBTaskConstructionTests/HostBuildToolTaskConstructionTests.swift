@@ -864,6 +864,11 @@ fileprivate struct HostBuildToolTaskConstructionTests: CoreBasedTests {
                 }
                 #expect(sharedDependencyProduct?.parameters.activeRunDestination == nil)
                 #expect(sharedDependencyProduct?.parameters.activeArchitecture == Architecture.hostStringValue)
+                let destinationSharedDependencyProduct = graph.allTargets.first {
+                    $0.target.name == "SharedDependencyProduct"
+                        && $0.parameters.activeRunDestination != nil
+                }
+                #expect(sharedDependencyProduct?.guid != destinationSharedDependencyProduct?.guid)
 
                 results.checkTarget("Library") { libraryTarget in
                     results.checkTask(.matchTarget(libraryTarget), .matchRuleType("SwiftDriver Compilation")) { compileTask in

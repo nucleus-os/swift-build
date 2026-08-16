@@ -93,6 +93,9 @@ public final class ConfiguredTarget: Hashable, CustomStringConvertible, Serializ
         if !parameters.isEmpty {
             components.append(("parameters", parameters.joined(separator: "-")))
         }
+        if let activeArchitecture = self.parameters.activeArchitecture {
+            components.append(("activeArchitecture", activeArchitecture))
+        }
         if specializeGuidForActiveRunDestination,
            let runDestination = self.parameters.activeRunDestination {
             var runDestString = runDestination.platform
@@ -115,6 +118,10 @@ public final class ConfiguredTarget: Hashable, CustomStringConvertible, Serializ
             } else {
                 return nil
             }
+        }
+
+        if let activeArchitecture = parameters.activeArchitecture {
+            components.append("ARCH:\(activeArchitecture)")
         }
 
         if specializeGuidForActiveRunDestination {
